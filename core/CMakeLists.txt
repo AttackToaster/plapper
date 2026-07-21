@@ -46,6 +46,11 @@ if(PLOUNTER_BUILD_CAPTURE)
   endif()
 endif()
 
+if(PLOUNTER_BUILD_TESTS AND PLOUNTER_BUILD_CAPTURE)
+  add_executable(plounter_diag tools/diag.cpp)
+  target_link_libraries(plounter_diag PRIVATE plounter_core)
+endif()
+
 if(PLOUNTER_BUILD_TESTS)
   include(FetchContent)
   FetchContent_Declare(catch2

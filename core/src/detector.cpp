@@ -1,6 +1,7 @@
 #include "detector.hpp"
 
 #include <algorithm>
+#include <cstdio>
 
 namespace plounter {
 
@@ -20,6 +21,7 @@ void Detector::prepare() {
   lookbackSlots_ = std::clamp(int(cfg_.rise_lookback_ms), 1, kHist - 1);
 
   confirmSamples_ = int(kConfirmMs * 0.001f * sr);
+  decaySamples_ = int(cfg_.decay_check_ms * 0.001f * sr);
   refractorySamples_ = int(cfg_.refractory_ms * 0.001f * sr);
   warmup_ = int(cfg_.warmup_ms * 0.001f * sr);
   sensitivityDb_.store(cfg_.sensitivity_db, std::memory_order_relaxed);
@@ -43,13 +45,16 @@ int32_t Detector::process(const float* mono, int32_t n) {
     const float eHp = envHp_.process(hp);
     const float eFull = envFull_.process(x);
 
-    /* sliding window: ZCR on raw sign changes, RMS sums per band */
-    const int8_t s = x >= 0.0f ? 1 : -1;
+    /* sliding window: ZCR on the high-passed signal (raw is LF-dominated in
+     * real rooms and masks clap crossings), RMS sums per band.
+     * winPos_ holds the OLDEST sample (about to be overwritten); the pair
+     * leaving the window is (oldest, second-oldest). */
+    const int8_t s = hp >= 0.0f ? 1 : -1;
     if (winFilled_ >= kWin) {
-      const int leaving = (winPos_ + 1) % kWin;
-      if (signs_[size_t(winPos_ == 0 ? kWin - 1 : winPos_ - 1)] !=
-          signs_[size_t(leaving)])
-        --zcrCount_;  /* the pair (leaving, leaving+1) exits the window */
+      const int secondOldest = (winPos_ + 1) % kWin;
+      if (signs_[size_t(winPos_)] != signs_[size_t(secondOldest)] &&
+          zcrCount_ > 0)
+        --zcrCount_;
     }
     const int prev = winPos_ == 0 ? kWin - 1 : winPos_ - 1;
     if (winFilled_ > 0 && s != signs_[size_t(prev)]) ++zcrCount_;
@@ -92,8 +97,36 @@ int32_t Detector::process(const float* mono, int32_t n) {
             sumFullSq_ > 1e-12 ? float(std::sqrt(sumHpSq_ / sumFullSq_)) : 0.0f;
         const float zcr =
             winFilled_ >= kWin ? float(zcrCount_) / float(kWin) : 0.0f;
-        if (riseOk() && bandRatio >= cfg_.band_ratio_min &&
-            zcr >= cfg_.zcr_min) {
+        const bool rise = riseOk();
+        const bool pass = rise && bandRatio >= cfg_.band_ratio_min &&
+                          zcr >= cfg_.zcr_min;
+        if (debugLog_.load(std::memory_order_relaxed)) {
+          std::fprintf(stderr,
+                       "[plounter] candidate: env=%.1fdB floor=%.1fdB "
+                       "rise=%s ratio=%.2f(min %.2f) zcr=%.3f(min %.3f) -> %s\n",
+                       eHpDb, floorDb, rise ? "ok" : "FAIL", bandRatio,
+                       cfg_.band_ratio_min, zcr, cfg_.zcr_min,
+                       pass ? "decay-check" : "reject");
+        }
+        if (pass) {
+          envConfirmDb_ = eHpDb;
+          decayPending_ = decaySamples_;
+        }
+      }
+    } else if (decayPending_ > 0) {
+      if (--decayPending_ == 0) {
+        /* claps are over in ~100 ms; sustained broadband onsets (fan
+         * turning on) stay loud and get rejected here */
+        const bool decayed = eHpDb <= envConfirmDb_ - cfg_.decay_drop_db;
+        if (debugLog_.load(std::memory_order_relaxed)) {
+          std::fprintf(stderr,
+                       "[plounter] decay: env=%.1fdB confirm=%.1fdB "
+                       "need<=%.1fdB -> %s\n",
+                       eHpDb, envConfirmDb_,
+                       envConfirmDb_ - cfg_.decay_drop_db,
+                       decayed ? "COUNT" : "reject");
+        }
+        if (decayed) {
           count_.fetch_add(1, std::memory_order_relaxed);
           ++claps;
           refractory_ = refractorySamples_;
@@ -106,6 +139,7 @@ int32_t Detector::process(const float* mono, int32_t n) {
   }
 
   envHpDbShared_.store(db_from_lin(envHp_.value()), std::memory_order_relaxed);
+  envFullDbShared_.store(db_from_lin(envFull_.value()), std::memory_order_relaxed);
   floorDbShared_.store(db_from_lin(floor_), std::memory_order_relaxed);
   return claps;
 }

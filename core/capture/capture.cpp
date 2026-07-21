@@ -45,6 +45,9 @@ plounter_capture* plounter_capture_start(plounter_detector* d,
     delete cap;
     return nullptr;
   }
+  fprintf(stderr, "[plounter] capture: backend=%s device=\"%s\" rate=%u\n",
+          ma_get_backend_name(cap->device.pContext->backend),
+          cap->device.capture.name, cap->device.sampleRate);
   return cap;
 }
 

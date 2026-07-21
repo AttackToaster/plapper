@@ -75,9 +75,11 @@ public:
   uint64_t totalCount() const { return count_.load(std::memory_order_relaxed); }
   void resetCount() { count_.store(0, std::memory_order_relaxed); }
 
+  void setDebugLog(bool on) { debugLog_.store(on, std::memory_order_relaxed); }
   void setSensitivity(float db) { sensitivityDb_.store(db, std::memory_order_relaxed); }
   float sensitivity() const { return sensitivityDb_.load(std::memory_order_relaxed); }
   float envelopeDb() const { return envHpDbShared_.load(std::memory_order_relaxed); }
+  float envelopeFullDb() const { return envFullDbShared_.load(std::memory_order_relaxed); }
   float noiseFloorDb() const { return floorDbShared_.load(std::memory_order_relaxed); }
 
 private:
@@ -108,13 +110,17 @@ private:
   int winPos_ = 0, winFilled_ = 0, zcrCount_ = 0;
 
   int pending_ = 0, confirmSamples_ = 0;
+  int decayPending_ = 0, decaySamples_ = 0;
+  float envConfirmDb_ = 0.0f;
   int refractory_ = 0, refractorySamples_ = 0;
   int warmup_ = 0;
   bool wasAbove_ = false;
 
+  std::atomic<bool> debugLog_{false};
   std::atomic<uint64_t> count_{0};
   std::atomic<float> sensitivityDb_{12.0f};
   std::atomic<float> envHpDbShared_{-120.0f};
+  std::atomic<float> envFullDbShared_{-120.0f};
   std::atomic<float> floorDbShared_{-120.0f};
 };
 

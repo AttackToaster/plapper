@@ -85,12 +85,23 @@ TEST_CASE("five claps spaced 400 ms count as five") {
   CHECK(run(f.d, buf) == 5);
 }
 
-TEST_CASE("two claps 60 ms apart merge into one (refractory)") {
+TEST_CASE("two claps 60 ms apart do not double-count") {
+  /* A 60 ms equal-amplitude double hit is not humanly clappable; the decay
+   * gate reads it as sustained sound and rejects, so 0 is also acceptable.
+   * The assertion is: never 2. */
   Fixture f;
   auto buf = silence(2.0, 3e-4f);
   add_clap(buf, 1.0);
   add_clap(buf, 1.06);
-  CHECK(run(f.d, buf) == 1);
+  CHECK(run(f.d, buf) <= 1);
+}
+
+TEST_CASE("claps 300 ms apart both count") {
+  Fixture f;
+  auto buf = silence(2.5, 3e-4f);
+  add_clap(buf, 1.0);
+  add_clap(buf, 1.3);
+  CHECK(run(f.d, buf) == 2);
 }
 
 TEST_CASE("loud low tone never triggers") {
@@ -131,6 +142,18 @@ TEST_CASE("sensitivity: high threshold rejects a soft clap, low accepts") {
     Fixture lax(6.0f);
     CHECK(run(lax.d, buf) == 1);
   }
+}
+
+TEST_CASE("clap after long low-frequency room tone still counts") {
+  /* Regression: the sliding ZCR counter once drifted negative on
+   * LF-dominated input (wrong pair removed from the window), which
+   * silently rejected every real clap. White-noise room tone masks it;
+   * a mains-hum-style tone does not. */
+  Fixture f;
+  auto buf = silence(5.0, 0.0f);
+  add_sine(buf, 0.0, 5.0, 60.0f, 3e-3f); /* ~-50 dBFS hum */
+  add_clap(buf, 4.0, 0.4f);
+  CHECK(run(f.d, buf) == 1);
 }
 
 TEST_CASE("counter reset and meter taps behave") {

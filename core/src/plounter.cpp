@@ -16,12 +16,14 @@ plounter_config plounter_config_default(double sample_rate) {
   c.sensitivity_db = 12.0f;
   c.hpf_hz = 1500.0f;
   c.refractory_ms = 180.0f;
-  c.min_level_db = -50.0f;
+  c.min_level_db = -60.0f;
   c.rise_db = 9.0f;
   c.rise_lookback_ms = 20.0f;
   c.band_ratio_min = 0.30f;
   c.zcr_min = 0.12f;
   c.warmup_ms = 300.0f;
+  c.decay_check_ms = 80.0f;
+  c.decay_drop_db = 5.0f;
   return c;
 }
 
@@ -50,6 +52,10 @@ void plounter_reset_count(plounter_detector* d) {
   if (d) d->impl.resetCount();
 }
 
+void plounter_debug_log(plounter_detector* d, int enable) {
+  if (d) d->impl.setDebugLog(enable != 0);
+}
+
 void plounter_set_sensitivity(plounter_detector* d, float db) {
   if (d) d->impl.setSensitivity(db);
 }
@@ -60,6 +66,10 @@ float plounter_get_sensitivity(const plounter_detector* d) {
 
 float plounter_envelope_db(const plounter_detector* d) {
   return d ? d->impl.envelopeDb() : -120.0f;
+}
+
+float plounter_envelope_full_db(const plounter_detector* d) {
+  return d ? d->impl.envelopeFullDb() : -120.0f;
 }
 
 float plounter_noise_floor_db(const plounter_detector* d) {
