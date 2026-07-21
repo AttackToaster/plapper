@@ -20,6 +20,14 @@ PLAPPER_API plapper_capture* plapper_capture_start(plapper_detector* d,
                                                       double sample_rate);
 PLAPPER_API void plapper_capture_stop(plapper_capture* c);
 
+/* Session audio recording: writes 16-bit mono WAV at the capture rate to
+ * `path` until stopped. Returns 1 on success, 0 on failure. Recording
+ * always stops (and the file is finalized) when the capture is stopped. */
+PLAPPER_API int plapper_capture_record_start(plapper_capture* c,
+                                             const char* path);
+PLAPPER_API void plapper_capture_record_stop(plapper_capture* c);
+PLAPPER_API int plapper_capture_is_recording(const plapper_capture* c);
+
 #ifdef __cplusplus
 }
 #endif

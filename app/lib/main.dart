@@ -4,6 +4,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -243,6 +244,246 @@ class _CounterPageState extends State<CounterPage>
   bool _konamiUnlocked = false;
 
   bool _calibrating = false;
+
+  // Session audio recording (16-bit WAV, local only, explicit toggle).
+  bool _recording = false;
+  String? _recordPath;
+  DateTime? _recordStart;
+  Directory? _recDirCache;
+
+  Future<Directory> _recordingsDir() async {
+    if (_recDirCache != null) return _recDirCache!;
+    final docs = await getApplicationDocumentsDirectory();
+    final d = Directory('${docs.path}${Platform.pathSeparator}plapper');
+    await d.create(recursive: true);
+    _recDirCache = d;
+    return d;
+  }
+
+  void _snack(String text, {SnackBarAction? action}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: pal.accentDeep,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        action: action,
+        content: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontFamily: 'Quicksand',
+            fontVariations: [_wghtSemi],
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _finishRecording() async {
+    final p = _plapper;
+    if (p == null || !_recording) return;
+    p.stopRecording();
+    setState(() => _recording = false);
+    final path = _recordPath;
+    if (path == null) return;
+    final f = File(path);
+    final mb = f.existsSync() ? f.lengthSync() / (1024 * 1024) : 0.0;
+    _snack(
+      'saved ✨ ${path.split(Platform.pathSeparator).last} '
+      '(${mb.toStringAsFixed(1)} MB)',
+      action: SnackBarAction(
+        label: 'show',
+        textColor: Colors.white,
+        onPressed: _openRecordingsFolder,
+      ),
+    );
+  }
+
+  Future<void> _toggleRecording() async {
+    final p = _plapper;
+    if (p == null) return;
+    if (_recording) {
+      await _finishRecording();
+      return;
+    }
+    if (!_listening) {
+      _snack('start listening first — recording rides the live mic 💖');
+      return;
+    }
+    if (!(_prefs?.getBool('recordNoticeShown') ?? false)) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: pal.bgTop,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: Text(
+            'one thing first ♡',
+            style: TextStyle(fontFamily: 'Pacifico', color: pal.text),
+          ),
+          content: Text(
+            'recording saves everything the mic hears — the whole room, '
+            'not just plaps — until you stop it. files stay on this '
+            'device unless you share them.',
+            style: TextStyle(color: pal.text),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('not now'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: pal.accentDeep),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('got it, record'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      _prefs?.setBool('recordNoticeShown', true);
+    }
+    final dir = await _recordingsDir();
+    final now = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    final name =
+        'plapper-${now.year}${two(now.month)}${two(now.day)}-${two(now.hour)}${two(now.minute)}${two(now.second)}.wav';
+    final path = '${dir.path}${Platform.pathSeparator}$name';
+    if (p.startRecording(path)) {
+      setState(() {
+        _recording = true;
+        _recordPath = path;
+        _recordStart = now;
+      });
+    } else {
+      _snack('could not start recording 💔');
+    }
+  }
+
+  Future<void> _openRecordingsFolder() async {
+    final dir = await _recordingsDir();
+    if (Platform.isLinux) {
+      Process.run('xdg-open', [dir.path]);
+    } else if (Platform.isMacOS) {
+      Process.run('open', [dir.path]);
+    } else if (Platform.isWindows) {
+      Process.run('explorer', [dir.path]);
+    } else {
+      _snack('recordings live in: ${dir.path}');
+    }
+  }
+
+  Future<void> _openRecordingsList() async {
+    final dir = await _recordingsDir();
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final files =
+              dir
+                  .listSync()
+                  .whereType<File>()
+                  .where((f) => f.path.endsWith('.wav'))
+                  .toList()
+                ..sort(
+                  (a, b) =>
+                      b.statSync().modified.compareTo(a.statSync().modified),
+                );
+          return Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [pal.bgTop, pal.bgBottom],
+              ),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 14, 24, 24),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.7,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'recordings',
+                  style: TextStyle(
+                    fontFamily: 'Pacifico',
+                    fontSize: 22,
+                    color: pal.text,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextButton.icon(
+                  onPressed: _openRecordingsFolder,
+                  style: TextButton.styleFrom(foregroundColor: pal.accentDeep),
+                  icon: const Icon(Icons.folder_open_rounded, size: 16),
+                  label: const Text('open folder'),
+                ),
+                const SizedBox(height: 6),
+                if (files.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'nothing here yet — hit record 💖',
+                      style: TextStyle(color: pal.textSoft),
+                    ),
+                  )
+                else
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: files.length,
+                      itemBuilder: (context, i) {
+                        final f = files[i];
+                        final stat = f.statSync();
+                        final mb = stat.size / (1024 * 1024);
+                        final m = stat.modified;
+                        String two(int v) => v.toString().padLeft(2, '0');
+                        return ListTile(
+                          dense: true,
+                          title: Text(
+                            f.path.split(Platform.pathSeparator).last,
+                            style: TextStyle(
+                              color: pal.text,
+                              fontSize: 13,
+                              fontVariations: const [_wghtSemi],
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${mb.toStringAsFixed(1)} MB · '
+                            '${m.year}-${two(m.month)}-${two(m.day)} ${two(m.hour)}:${two(m.minute)}',
+                            style: TextStyle(color: pal.textSoft, fontSize: 11),
+                          ),
+                          trailing: IconButton(
+                            icon: Icon(
+                              Icons.delete_outline_rounded,
+                              color: pal.accentDeep,
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              f.deleteSync();
+                              setSheetState(() {});
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
 
   // Comfy pack: pet name, praise lines, achievement titles, custom floaties.
   final TextEditingController _petNameCtrl = TextEditingController();
@@ -846,6 +1087,39 @@ class _CounterPageState extends State<CounterPage>
                       ],
                     ),
                   ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
+                    label: 'recordings ♡',
+                    trailing: '16-bit wav · local only',
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: pal.accentDeep,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _openRecordingsList();
+                          },
+                          icon: const Icon(
+                            Icons.library_music_rounded,
+                            size: 16,
+                          ),
+                          label: const Text('browse recordings'),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: pal.accentDeep,
+                          ),
+                          onPressed: _openRecordingsFolder,
+                          icon: const Icon(Icons.folder_open_rounded, size: 16),
+                          label: const Text('open folder'),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -905,6 +1179,8 @@ class _CounterPageState extends State<CounterPage>
     if (p == null) return;
 
     if (_listening) {
+      if (_recording) await _finishRecording();
+      if (!mounted) return;
       p.stopListening();
       _poll?.cancel();
       _poll = null;
@@ -1231,8 +1507,54 @@ class _CounterPageState extends State<CounterPage>
                               ),
                             ),
                           const SizedBox(height: 24),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
+                          if (_recording && _recordStart != null)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: AnimatedBuilder(
+                                animation: _drift,
+                                builder: (context, _) {
+                                  final blink =
+                                      (math.sin(
+                                                _drift.value * 2 * math.pi * 14,
+                                              ) +
+                                              1) /
+                                          4 +
+                                      0.5;
+                                  final secs = DateTime.now()
+                                      .difference(_recordStart!)
+                                      .inSeconds;
+                                  return Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        width: 9,
+                                        height: 9,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: Colors.redAccent.withValues(
+                                            alpha: blink,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 7),
+                                      Text(
+                                        'recording ♡ ${(secs ~/ 60).toString().padLeft(2, '0')}:${(secs % 60).toString().padLeft(2, '0')}',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: pal.text,
+                                          fontVariations: const [_wghtBold],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            spacing: 12,
+                            runSpacing: 10,
                             children: [
                               _GradientPill(
                                 pal: pal,
@@ -1245,7 +1567,15 @@ class _CounterPageState extends State<CounterPage>
                                     : 'start listening',
                                 onTap: _toggleListening,
                               ),
-                              const SizedBox(width: 14),
+                              _GradientPill(
+                                pal: pal,
+                                outlined: !_recording,
+                                icon: _recording
+                                    ? Icons.stop_rounded
+                                    : Icons.fiber_manual_record_rounded,
+                                label: _recording ? 'stop rec' : 'record',
+                                onTap: _toggleRecording,
+                              ),
                               _GradientPill(
                                 pal: pal,
                                 outlined: true,
@@ -1262,7 +1592,6 @@ class _CounterPageState extends State<CounterPage>
                                   });
                                 },
                               ),
-                              const SizedBox(width: 14),
                               _GradientPill(
                                 pal: pal,
                                 outlined: true,
