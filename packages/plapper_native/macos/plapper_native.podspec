@@ -9,7 +9,7 @@ forwarder files that relatively include ../../../../core sources.
                        DESC
   s.homepage         = 'https://github.com/AttackToaster/plapper'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'SeamusMullan' => 'seamusmullan2023@gmail.com' }
+  s.author           = { 'AttackToaster' => '171244563+AttackToaster@users.noreply.github.com' }
 
   s.source           = { :path => '.' }
   s.source_files     = 'Classes/**/*'
