@@ -38,7 +38,8 @@ jobs:
       - name: Build NSIS installer
         run: |
           choco install nsis -y --no-progress
-          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" /DBUNDLE=app\build\windows\x64\runner\Release installer\windows.nsi
+          & "${env:ProgramFiles(x86)}\NSIS\makensis.exe" "/DBUNDLE=$env:GITHUB_WORKSPACE\app\build\windows\x64\runner\Release" installer\windows.nsi
+          if (Test-Path installer\plapper-setup-windows-x64.exe) { Move-Item installer\plapper-setup-windows-x64.exe . }
       - uses: softprops/action-gh-release@v2
         with:
           files: |
