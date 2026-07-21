@@ -1,13 +1,13 @@
 Pod::Spec.new do |s|
   s.name             = 'plapper_native'
-  s.version          = '0.1.0'
+  s.version          = '1.0.0'
   s.summary          = 'plapper clap-detection core (macOS build).'
   s.description      = <<-DESC
 Builds the shared plapper C++ DSP core + miniaudio capture for macOS.
 Podspecs cannot reference files outside this folder, so Classes/ contains
 forwarder files that relatively include ../../../../core sources.
                        DESC
-  s.homepage         = 'https://github.com/SeamusMullan/plapper'
+  s.homepage         = 'https://github.com/AttackToaster/plapper'
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'SeamusMullan' => 'seamusmullan2023@gmail.com' }
 

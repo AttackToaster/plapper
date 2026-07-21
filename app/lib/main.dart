@@ -244,6 +244,53 @@ class _CounterPageState extends State<CounterPage>
 
   bool _calibrating = false;
 
+  // Comfy pack: pet name, praise lines, achievement titles, custom floaties.
+  final TextEditingController _petNameCtrl = TextEditingController();
+  final TextEditingController _floatiesCtrl = TextEditingController();
+  final math.Random _rng = math.Random();
+  int _bestAtSessionStart = 0;
+  bool _bestCelebrated = false;
+
+  static const _praise = [
+    'such a good girl, {name} 💖',
+    'so pretty when you plap, {name} ✨',
+    '{name}!! iconic behavior 🎀',
+    'ur doing amazing sweetie 💗',
+    'gorgeous AND loud 😌💅',
+    'the room said WOW, {name} ✧',
+  ];
+
+  static const _titleLadder = [
+    (0, 'fresh plapper'),
+    (100, 'plap princess'),
+    (300, 'certified plapper'),
+    (700, 'plapstar'),
+    (1500, 'legendary plapologist'),
+    (3000, 'plap deity'),
+  ];
+
+  String get _petName =>
+      _petNameCtrl.text.trim().isEmpty ? 'cutie' : _petNameCtrl.text.trim();
+
+  String _praiseLine() =>
+      _praise[_rng.nextInt(_praise.length)].replaceAll('{name}', _petName);
+
+  String get _title {
+    var t = _titleLadder.first.$2;
+    for (final (at, name) in _titleLadder) {
+      if (_lifetime >= at) t = name;
+    }
+    return t;
+  }
+
+  /// User-picked background floaties (any emoji); theme default when empty.
+  List<String> get _floatyGlyphs {
+    final raw = _floatiesCtrl.text.trim();
+    if (raw.isEmpty) return pal.floaties;
+    final glyphs = raw.characters.where((c) => c.trim().isNotEmpty).toList();
+    return glyphs.isEmpty ? pal.floaties : glyphs;
+  }
+
   /// Auto noise threshold: watch how far the room's envelope pokes above
   /// the adaptive floor for 2.5 s of silence, then set sensitivity a 6 dB
   /// safety margin above the worst excursion.
@@ -362,6 +409,11 @@ class _CounterPageState extends State<CounterPage>
     duration: const Duration(seconds: 14),
   )..repeat();
 
+  late final AnimationController _burst = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
   @override
   void initState() {
     super.initState();
@@ -383,6 +435,8 @@ class _CounterPageState extends State<CounterPage>
         _releaseMs = prefs.getDouble('releaseMs') ?? _releaseMs;
         _bestSession = prefs.getInt('bestSession') ?? 0;
         _lifetime = prefs.getInt('lifetimeClaps') ?? 0;
+        _petNameCtrl.text = prefs.getString('petName') ?? '';
+        _floatiesCtrl.text = prefs.getString('customFloaties') ?? '';
         _paletteIdx = (prefs.getInt('paletteIdx') ?? 0).clamp(
           0,
           palettes.length - 1,
@@ -398,8 +452,11 @@ class _CounterPageState extends State<CounterPage>
     _poll?.cancel();
     _milestoneHide?.cancel();
     _milestoneCtrl.dispose();
+    _petNameCtrl.dispose();
+    _floatiesCtrl.dispose();
     _pulse.dispose();
     _drift.dispose();
+    _burst.dispose();
     _plapper?.dispose();
     super.dispose();
   }
@@ -408,6 +465,7 @@ class _CounterPageState extends State<CounterPage>
     final text =
         'I got $_sessionClaps plaps in one plapper session!! 👏💖'
         '${_bestSession > 0 ? ' (best ever: $_bestSession)' : ''}'
+        ' · rank: $_title'
         ' · $_unlockedCount/${palettes.length} themes unlocked ✨';
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
@@ -581,6 +639,89 @@ class _CounterPageState extends State<CounterPage>
                   const SizedBox(height: 12),
                   _LabeledCard(
                     pal: pal,
+                    label: 'pet name ♡',
+                    trailing: 'used in praise + milestones as {name}',
+                    child: TextField(
+                      controller: _petNameCtrl,
+                      maxLength: 24,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: pal.cardText,
+                        fontVariations: const [_wghtSemi],
+                      ),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        isDense: true,
+                        hintText: 'what should i call you? 💖',
+                        hintStyle: TextStyle(
+                          color: pal.cardText.withValues(alpha: 0.35),
+                        ),
+                        filled: true,
+                        fillColor: pal.accent.withValues(alpha: 0.06),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: pal.accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: pal.accent, width: 1.5),
+                        ),
+                      ),
+                      onChanged: (v) => _prefs?.setString('petName', v),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
+                    label: 'background floaties ♡',
+                    trailing: 'empty = theme default',
+                    child: TextField(
+                      controller: _floatiesCtrl,
+                      maxLength: 24,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: pal.cardText,
+                        fontVariations: const [_wghtSemi],
+                      ),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        isDense: true,
+                        hintText: 'paste your own emoji — 💕⛓️🎀🦋…',
+                        hintStyle: TextStyle(
+                          color: pal.cardText.withValues(alpha: 0.35),
+                        ),
+                        filled: true,
+                        fillColor: pal.accent.withValues(alpha: 0.06),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: pal.accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: pal.accent, width: 1.5),
+                        ),
+                      ),
+                      onChanged: (v) {
+                        both(() {});
+                        _prefs?.setString('customFloaties', v);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
                     label: 'sensitivity ♡',
                     trailing:
                         '+${_sensitivityDb.toStringAsFixed(0)} dB over room noise',
@@ -740,17 +881,23 @@ class _CounterPageState extends State<CounterPage>
     );
   }
 
+  void _showPill(String text, [int ms = 2600]) {
+    _milestoneHide?.cancel();
+    setState(() => _milestoneShown = text);
+    _milestoneHide = Timer(Duration(milliseconds: ms), () {
+      if (mounted) setState(() => _milestoneShown = null);
+    });
+  }
+
   void _maybeShowMilestone(int oldCount, int newCount) {
     if (_milestoneN < 1 || newCount <= 0) return;
     if (newCount ~/ _milestoneN == oldCount ~/ _milestoneN) return;
     final reached = (newCount ~/ _milestoneN) * _milestoneN;
-    _milestoneHide?.cancel();
-    setState(() {
-      _milestoneShown = _milestoneCtrl.text.replaceAll('{count}', '$reached');
-    });
-    _milestoneHide = Timer(const Duration(milliseconds: 2600), () {
-      if (mounted) setState(() => _milestoneShown = null);
-    });
+    _showPill(
+      _milestoneCtrl.text
+          .replaceAll('{count}', '$reached')
+          .replaceAll('{name}', _petName),
+    );
   }
 
   Future<void> _toggleListening() async {
@@ -766,6 +913,26 @@ class _CounterPageState extends State<CounterPage>
         _rate = 0;
         _clapTimes.clear();
       });
+      if (_sessionClaps > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: pal.accentDeep,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            content: Text(
+              '${_praiseLine()} — $_sessionClaps plaps',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontFamily: 'Quicksand',
+                fontVariations: [_wghtSemi],
+                color: Colors.white,
+              ),
+            ),
+          ),
+        );
+      }
       return;
     }
 
@@ -790,6 +957,8 @@ class _CounterPageState extends State<CounterPage>
       _sessionClaps = 0;
       _clapTimes.clear();
       _rate = 0;
+      _bestAtSessionStart = _bestSession;
+      _bestCelebrated = false;
     });
     _poll = Timer.periodic(const Duration(milliseconds: 33), (_) {
       final newCount = p.count;
@@ -806,11 +975,8 @@ class _CounterPageState extends State<CounterPage>
         _prefs?.setInt('lifetimeClaps', _lifetime);
         for (final p in palettes) {
           if (oldLifetime < p.unlockAt && _lifetime >= p.unlockAt) {
-            _milestoneHide?.cancel();
-            _milestoneShown = 'theme unlocked: ${p.name} ${p.emoji} !!';
-            _milestoneHide = Timer(const Duration(milliseconds: 3200), () {
-              if (mounted) setState(() => _milestoneShown = null);
-            });
+            _burst.forward(from: 0);
+            _showPill('theme unlocked: ${p.name} ${p.emoji} !!', 3200);
           }
         }
       }
@@ -822,6 +988,13 @@ class _CounterPageState extends State<CounterPage>
         if (_sessionClaps > _bestSession) {
           _bestSession = _sessionClaps;
           _prefs?.setInt('bestSession', _bestSession);
+        }
+        if (!_bestCelebrated &&
+            _bestAtSessionStart > 0 &&
+            _sessionClaps > _bestAtSessionStart) {
+          _bestCelebrated = true;
+          _burst.forward(from: 0);
+          _showPill('new best!! ${_praiseLine()}', 3200);
         }
         _envDb = p.envelopeDb;
         _floorDb = p.noiseFloorDb;
@@ -873,6 +1046,21 @@ class _CounterPageState extends State<CounterPage>
                         t: _drift.value,
                         pal: pal,
                         lively: _listening,
+                        glyphs: _floatyGlyphs,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _burst,
+                    builder: (context, _) => CustomPaint(
+                      painter: _BurstPainter(
+                        t: _burst.value,
+                        pal: pal,
+                        glyphs: _floatyGlyphs,
                       ),
                     ),
                   ),
@@ -932,6 +1120,15 @@ class _CounterPageState extends State<CounterPage>
                               fontFamily: 'Pacifico',
                               fontSize: 22,
                               color: pal.textSoft,
+                            ),
+                          ),
+                          Text(
+                            '☆ $_title ☆',
+                            style: TextStyle(
+                              fontSize: 12,
+                              letterSpacing: 2,
+                              color: pal.accent.withValues(alpha: 0.8),
+                              fontVariations: const [_wghtBold],
                             ),
                           ),
                           SizedBox(
@@ -1115,10 +1312,7 @@ class _Wordmark extends StatelessWidget {
                 colors: [pal.accent, pal.accentDeep],
               ).createShader(const Rect.fromLTWH(0, -10, 160, 75)),
             shadows: [
-              Shadow(
-                color: pal.accent.withValues(alpha: 0.55),
-                blurRadius: 18,
-              ),
+              Shadow(color: pal.accent.withValues(alpha: 0.55), blurRadius: 18),
             ],
           ),
         ),
@@ -1154,7 +1348,14 @@ class _SparkleRow extends StatelessWidget {
 
 /// Hearts and sparkles drifting up the background.
 class _FloatiesPainter extends CustomPainter {
-  _FloatiesPainter({required this.t, required this.pal, required this.lively});
+  _FloatiesPainter({
+    required this.t,
+    required this.pal,
+    required this.lively,
+    required this.glyphs,
+  });
+
+  final List<String> glyphs;
 
   final double t;
   final Palette pal;
@@ -1173,7 +1374,7 @@ class _FloatiesPainter extends CustomPainter {
       final phase = rng.nextDouble();
       final wobble = rng.nextDouble() * 24;
       final fontSize = 10.0 + rng.nextDouble() * 14;
-      final glyph = pal.floaties[i % pal.floaties.length];
+      final glyph = glyphs[i % glyphs.length];
 
       final progress = (t * speed + phase) % 1.0;
       final y = size.height * (1.05 - progress * 1.1);
@@ -1207,6 +1408,53 @@ class _FloatiesPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_FloatiesPainter old) => true;
+}
+
+/// One-shot radial burst of floaty glyphs for celebrations
+/// (new best session, theme unlock).
+class _BurstPainter extends CustomPainter {
+  _BurstPainter({required this.t, required this.pal, required this.glyphs});
+
+  final double t;
+  final Palette pal;
+  final List<String> glyphs;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (t <= 0.0 || t >= 1.0) return;
+    final rng = math.Random(3);
+    final center = Offset(size.width / 2, size.height * 0.34);
+    const n = 22;
+    final ease = Curves.easeOut.transform(t);
+    for (var i = 0; i < n; i++) {
+      final angle = rng.nextDouble() * 2 * math.pi;
+      final dist = ease * (60 + rng.nextDouble() * 150);
+      final pos =
+          center +
+          Offset(math.cos(angle) * dist, math.sin(angle) * dist - 30 * ease);
+      final alpha = (1.0 - t).clamp(0.0, 1.0);
+      final glyph = glyphs[i % glyphs.length];
+      final tinted = _FloatiesPainter._tintedGlyphs.contains(glyph);
+      final tp = TextPainter(
+        text: TextSpan(
+          text: glyph,
+          style: TextStyle(
+            fontSize: 13.0 + rng.nextDouble() * 12,
+            color: tinted
+                ? (i.isEven ? pal.accent : pal.secondary).withValues(
+                    alpha: alpha,
+                  )
+                : Colors.white.withValues(alpha: alpha),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, pos);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BurstPainter old) => true;
 }
 
 class _GradientPill extends StatelessWidget {

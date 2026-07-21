@@ -1,6 +1,6 @@
 name: plapper_native
 description: "Builds and bundles the plapper clap-detection core for all platforms."
-version: 0.1.0
+version: 1.0.0
 publish_to: none
 
 environment:
