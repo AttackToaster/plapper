@@ -35,6 +35,9 @@ typedef struct plounter_config {
   float warmup_ms;         /* no triggers until the noise floor has settled */
   float decay_check_ms;    /* claps must decay; sustained noise (fans, ...) must not count */
   float decay_drop_db;     /* required envelope drop at decay_check_ms after confirm */
+  float env_attack_ms;     /* detection envelope attack */
+  float env_release_ms;    /* detection envelope release ("smoothing"); lower = faster re-arm */
+  float rearm_drop_db;     /* envelope must fall this far below the last event to re-arm */
 } plounter_config;
 
 PLOUNTER_API plounter_config plounter_config_default(double sample_rate);
@@ -58,6 +61,8 @@ PLOUNTER_API void plounter_debug_log(plounter_detector* d, int enable);
 
 PLOUNTER_API void plounter_set_sensitivity(plounter_detector* d, float db);
 PLOUNTER_API float plounter_get_sensitivity(const plounter_detector* d);
+PLOUNTER_API void plounter_set_env_release(plounter_detector* d, float ms);
+PLOUNTER_API float plounter_get_env_release(const plounter_detector* d);
 PLOUNTER_API float plounter_envelope_db(const plounter_detector* d);    /* detection-band envelope, dBFS */
 PLOUNTER_API float plounter_envelope_full_db(const plounter_detector* d); /* full-band envelope, dBFS */
 PLOUNTER_API float plounter_noise_floor_db(const plounter_detector* d); /* adaptive floor, dBFS */

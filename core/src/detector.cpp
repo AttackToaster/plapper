@@ -9,8 +9,10 @@ void Detector::prepare() {
   const double sr = cfg_.sample_rate;
   hp1_.prepare(sr, cfg_.hpf_hz);
   hp2_.prepare(sr, cfg_.hpf_hz);
-  envHp_.prepare(sr, 1.0f, 40.0f);
-  envFull_.prepare(sr, 1.0f, 40.0f);
+  envHp_.prepare(sr, cfg_.env_attack_ms, cfg_.env_release_ms);
+  envFull_.prepare(sr, cfg_.env_attack_ms, cfg_.env_release_ms);
+  releaseMs_.store(cfg_.env_release_ms, std::memory_order_relaxed);
+  appliedReleaseMs_ = cfg_.env_release_ms;
 
   /* floor: falls fast (tau ~80 ms), rises slow (tau ~2.5 s) so a clap
    * burst barely inflates it */
@@ -37,6 +39,13 @@ bool Detector::riseOk() const {
 
 int32_t Detector::process(const float* mono, int32_t n) {
   int32_t claps = 0;
+
+  const float rel = releaseMs_.load(std::memory_order_relaxed);
+  if (rel != appliedReleaseMs_ && rel > 0.5f) {
+    appliedReleaseMs_ = rel;
+    envHp_.setRelease(rel);
+    envFull_.setRelease(rel);
+  }
 
   for (int32_t i = 0; i < n; ++i) {
     const float x = mono[i];
@@ -91,6 +100,10 @@ int32_t Detector::process(const float* mono, int32_t n) {
                  cfg_.min_level_db);
     const bool above = eHpDb > thresholdDb;
 
+    if (!armed_ && (eHpDb < thresholdDb || eHpDb < rearmBelowDb_)) {
+      armed_ = true;
+    }
+
     if (pending_ > 0) {
       if (--pending_ == 0) {
         const float bandRatio =
@@ -111,6 +124,9 @@ int32_t Detector::process(const float* mono, int32_t n) {
         if (pass) {
           envConfirmDb_ = eHpDb;
           decayPending_ = decaySamples_;
+        } else {
+          armed_ = false;
+          rearmBelowDb_ = eHpDb - cfg_.rearm_drop_db;
         }
       }
     } else if (decayPending_ > 0) {
@@ -126,16 +142,17 @@ int32_t Detector::process(const float* mono, int32_t n) {
                        envConfirmDb_ - cfg_.decay_drop_db,
                        decayed ? "COUNT" : "reject");
         }
+        armed_ = false;
+        rearmBelowDb_ = eHpDb - cfg_.rearm_drop_db;
         if (decayed) {
           count_.fetch_add(1, std::memory_order_relaxed);
           ++claps;
           refractory_ = refractorySamples_;
         }
       }
-    } else if (above && !wasAbove_) {
+    } else if (armed_ && above) {
       pending_ = confirmSamples_;
     }
-    wasAbove_ = above;
   }
 
   envHpDbShared_.store(db_from_lin(envHp_.value()), std::memory_order_relaxed);

@@ -53,8 +53,14 @@ class _CounterPageState extends State<CounterPage>
   Timer? _poll;
   int _count = 0;
   double _envDb = -120, _floorDb = -120, _sensitivityDb = 12;
+  double _releaseMs = 20;
   bool _listening = false;
   String? _micError;
+
+  /// ~4 s of envelope history at the 33 ms poll rate.
+  static const int _histLen = 120;
+  final List<double> _envHist = List.filled(_histLen, -120, growable: false);
+  int _histHead = 0;
 
   late final AnimationController _pulse = AnimationController(
     vsync: this,
@@ -69,6 +75,7 @@ class _CounterPageState extends State<CounterPage>
     try {
       _plounter = Plounter();
       _sensitivityDb = _plounter!.sensitivityDb;
+      _releaseMs = _plounter!.envReleaseMs;
     } catch (e) {
       _initError = '$e';
     }
@@ -121,6 +128,8 @@ class _CounterPageState extends State<CounterPage>
         _count = newCount;
         _envDb = p.envelopeDb;
         _floorDb = p.noiseFloorDb;
+        _envHist[_histHead] = _envDb;
+        _histHead = (_histHead + 1) % _histLen;
       });
     });
   }
@@ -178,17 +187,18 @@ class _CounterPageState extends State<CounterPage>
                       )),
                   const Spacer(),
                   _LabeledCard(
-                    label: 'INPUT LEVEL',
+                    label: 'ENVELOPE — LAST 4 S',
                     trailing: _listening
                         ? '${_envDb.toStringAsFixed(0)} dB'
                         : 'mic off',
-                    child: LevelMeter(
-                      envelopeDb: _listening ? _envDb : -120,
+                    child: EnvelopeGraph(
+                      history: _envHist,
+                      head: _histHead,
                       floorDb: _listening ? _floorDb : -120,
                       thresholdDb: _listening ? thresholdDb : -120,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   _LabeledCard(
                     label: 'SENSITIVITY',
                     trailing:
@@ -200,6 +210,21 @@ class _CounterPageState extends State<CounterPage>
                       onChanged: (v) {
                         setState(() => _sensitivityDb = v);
                         _plounter?.sensitivityDb = v;
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    label: 'SMOOTHING',
+                    trailing:
+                        'release ${_releaseMs.toStringAsFixed(0)} ms — lower keeps up with fast claps',
+                    child: Slider(
+                      value: _releaseMs,
+                      min: 5,
+                      max: 80,
+                      onChanged: (v) {
+                        setState(() => _releaseMs = v);
+                        _plounter?.envReleaseMs = v;
                       },
                     ),
                   ),
@@ -296,70 +321,93 @@ class _LabeledCard extends StatelessWidget {
   }
 }
 
-/// Horizontal dB meter: envelope bar with a grey noise-floor tick and an
-/// amber trigger-threshold tick. Range -80..0 dBFS.
-class LevelMeter extends StatelessWidget {
-  const LevelMeter({
+/// Scrolling envelope history (detection band, dBFS -90..-10) with the
+/// noise floor (grey) and trigger threshold (amber) drawn as lines.
+class EnvelopeGraph extends StatelessWidget {
+  const EnvelopeGraph({
     super.key,
-    required this.envelopeDb,
+    required this.history,
+    required this.head,
     required this.floorDb,
     required this.thresholdDb,
   });
 
-  final double envelopeDb;
+  /// Ring buffer of envelope dB values; [head] is the write position
+  /// (= oldest sample).
+  final List<double> history;
+  final int head;
   final double floorDb;
   final double thresholdDb;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 26,
+      height: 96,
       child: CustomPaint(
         size: Size.infinite,
-        painter: _MeterPainter(envelopeDb, floorDb, thresholdDb),
+        painter: _GraphPainter(List.of(history), head, floorDb, thresholdDb),
       ),
     );
   }
 }
 
-class _MeterPainter extends CustomPainter {
-  _MeterPainter(this.envDb, this.floorDb, this.thresholdDb);
+class _GraphPainter extends CustomPainter {
+  _GraphPainter(this.hist, this.head, this.floorDb, this.thresholdDb);
 
-  final double envDb, floorDb, thresholdDb;
+  final List<double> hist;
+  final int head;
+  final double floorDb, thresholdDb;
 
-  static double _norm(double db) => ((db + 80) / 80).clamp(0.0, 1.0);
+  static const double _top = -10, _bottom = -90;
+
+  double _y(double db, Size s) =>
+      ((_top - db) / (_top - _bottom)).clamp(0.0, 1.0) * s.height;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final track = Paint()..color = Colors.white.withValues(alpha: 0.06);
-    final rrect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 6, size.width, 14), const Radius.circular(7));
-    canvas.drawRRect(rrect, track);
+    final bg = Paint()..color = Colors.white.withValues(alpha: 0.04);
+    canvas.drawRRect(
+        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(8)),
+        bg);
 
-    final envW = _norm(envDb) * size.width;
-    if (envW > 0) {
-      final fill = Paint()
-        ..shader = const LinearGradient(colors: [_meterGreen, _accent])
-            .createShader(Rect.fromLTWH(0, 0, size.width, 26));
-      canvas.save();
-      canvas.clipRRect(rrect);
-      canvas.drawRect(Rect.fromLTWH(0, 6, envW, 14), fill);
-      canvas.restore();
-    }
-
-    void tick(double db, Color color) {
-      final x = _norm(db) * size.width;
+    void hline(double db, Color color) {
+      if (db < _bottom || db > _top) return;
+      final y = _y(db, size);
       canvas.drawRect(
-          Rect.fromLTWH(x - 1, 0, 2, size.height), Paint()..color = color);
+          Rect.fromLTWH(0, y - 0.75, size.width, 1.5), Paint()..color = color);
     }
 
-    tick(floorDb, Colors.white.withValues(alpha: 0.35));
-    tick(thresholdDb, _accent);
+    hline(floorDb, Colors.white.withValues(alpha: 0.3));
+    hline(thresholdDb, _accent.withValues(alpha: 0.85));
+
+    final n = hist.length;
+    final path = Path();
+    final fillPath = Path()..moveTo(0, size.height);
+    for (var i = 0; i < n; i++) {
+      final db = hist[(head + i) % n]; // oldest -> newest
+      final x = i / (n - 1) * size.width;
+      final y = _y(db, size);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+      fillPath.lineTo(x, y);
+    }
+    fillPath
+      ..lineTo(size.width, size.height)
+      ..close();
+
+    canvas.drawPath(
+        fillPath, Paint()..color = _meterGreen.withValues(alpha: 0.12));
+    canvas.drawPath(
+        path,
+        Paint()
+          ..color = _meterGreen
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6);
   }
 
   @override
-  bool shouldRepaint(_MeterPainter old) =>
-      old.envDb != envDb ||
-      old.floorDb != floorDb ||
-      old.thresholdDb != thresholdDb;
+  bool shouldRepaint(_GraphPainter old) => true;
 }

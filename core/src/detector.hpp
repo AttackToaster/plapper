@@ -44,10 +44,12 @@ private:
 class EnvFollower {
 public:
   void prepare(double sr, float attackMs, float releaseMs) {
+    sr_ = sr;
     atk_ = coef(sr, attackMs);
     rel_ = coef(sr, releaseMs);
     env_ = 0.0f;
   }
+  void setRelease(float ms) { rel_ = coef(sr_, ms); }
   float process(float x) {
     const float a = std::fabs(x);
     const float c = a > env_ ? atk_ : rel_;
@@ -59,6 +61,7 @@ private:
   static float coef(double sr, float ms) {
     return std::exp(-1.0f / (float(sr) * ms * 0.001f));
   }
+  double sr_ = 48000.0;
   float atk_ = 0, rel_ = 0, env_ = 0;
 };
 
@@ -77,6 +80,8 @@ public:
 
   void setDebugLog(bool on) { debugLog_.store(on, std::memory_order_relaxed); }
   void setSensitivity(float db) { sensitivityDb_.store(db, std::memory_order_relaxed); }
+  void setEnvRelease(float ms) { releaseMs_.store(ms, std::memory_order_relaxed); }
+  float envRelease() const { return releaseMs_.load(std::memory_order_relaxed); }
   float sensitivity() const { return sensitivityDb_.load(std::memory_order_relaxed); }
   float envelopeDb() const { return envHpDbShared_.load(std::memory_order_relaxed); }
   float envelopeFullDb() const { return envFullDbShared_.load(std::memory_order_relaxed); }
@@ -114,11 +119,17 @@ private:
   float envConfirmDb_ = 0.0f;
   int refractory_ = 0, refractorySamples_ = 0;
   int warmup_ = 0;
-  bool wasAbove_ = false;
+  /* Schmitt-style arming: a new candidate needs the envelope to have fallen
+   * rearm_drop_db below the last event (or below threshold) first, so rapid
+   * successive claps retrigger without a full threshold re-crossing. */
+  bool armed_ = true;
+  float rearmBelowDb_ = -200.0f;
+  float appliedReleaseMs_ = 0.0f;
 
   std::atomic<bool> debugLog_{false};
   std::atomic<uint64_t> count_{0};
   std::atomic<float> sensitivityDb_{12.0f};
+  std::atomic<float> releaseMs_{20.0f};
   std::atomic<float> envHpDbShared_{-120.0f};
   std::atomic<float> envFullDbShared_{-120.0f};
   std::atomic<float> floorDbShared_{-120.0f};

@@ -6,12 +6,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:plounter/main.dart';
 
 void main() {
-  testWidgets('level meter renders without a native library', (tester) async {
-    await tester.pumpWidget(const MaterialApp(
+  testWidgets('envelope graph renders without a native library',
+      (tester) async {
+    final hist = List<double>.filled(120, -80.0);
+    hist[60] = -30.0; // one clap spike
+    await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: LevelMeter(envelopeDb: -30, floorDb: -60, thresholdDb: -48),
+        body: EnvelopeGraph(
+          history: hist,
+          head: 0,
+          floorDb: -70,
+          thresholdDb: -58,
+        ),
       ),
     ));
-    expect(find.byType(LevelMeter), findsOneWidget);
+    expect(find.byType(EnvelopeGraph), findsOneWidget);
   });
 }

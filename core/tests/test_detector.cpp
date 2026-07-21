@@ -86,14 +86,26 @@ TEST_CASE("five claps spaced 400 ms count as five") {
 }
 
 TEST_CASE("two claps 60 ms apart do not double-count") {
-  /* A 60 ms equal-amplitude double hit is not humanly clappable; the decay
-   * gate reads it as sustained sound and rejects, so 0 is also acceptable.
-   * The assertion is: never 2. */
+  /* 60 ms double hits are echo/flam territory, not two intentional claps. */
   Fixture f;
   auto buf = silence(2.0, 3e-4f);
   add_clap(buf, 1.0);
   add_clap(buf, 1.06);
   CHECK(run(f.d, buf) <= 1);
+}
+
+TEST_CASE("rapid clapping at ~7.7 Hz counts every clap") {
+  Fixture f;
+  auto buf = silence(3.0, 3e-4f);
+  for (int i = 0; i < 5; ++i) add_clap(buf, 1.0 + 0.13 * i);
+  CHECK(run(f.d, buf) == 5);
+}
+
+TEST_CASE("rapid LOUD clapping still retriggers (no threshold re-crossing)") {
+  Fixture f;
+  auto buf = silence(3.0, 3e-4f);
+  for (int i = 0; i < 5; ++i) add_clap(buf, 1.0 + 0.15 * i, 0.9f);
+  CHECK(run(f.d, buf) == 5);
 }
 
 TEST_CASE("claps 300 ms apart both count") {

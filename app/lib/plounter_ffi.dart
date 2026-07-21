@@ -69,6 +69,12 @@ class Plounter {
   static final _getSensitivity = _lib.lookupFunction<
       Float Function(Pointer<_Detector>),
       double Function(Pointer<_Detector>)>('plounter_get_sensitivity');
+  static final _setEnvRelease = _lib.lookupFunction<
+      Void Function(Pointer<_Detector>, Float),
+      void Function(Pointer<_Detector>, double)>('plounter_set_env_release');
+  static final _getEnvRelease = _lib.lookupFunction<
+      Float Function(Pointer<_Detector>),
+      double Function(Pointer<_Detector>)>('plounter_get_env_release');
   static final _envelopeDb = _lib.lookupFunction<
       Float Function(Pointer<_Detector>),
       double Function(Pointer<_Detector>)>('plounter_envelope_db');
@@ -93,6 +99,8 @@ class Plounter {
   double get noiseFloorDb => _noiseFloorDb(_detector);
   double get sensitivityDb => _getSensitivity(_detector);
   set sensitivityDb(double db) => _setSensitivity(_detector, db);
+  double get envReleaseMs => _getEnvRelease(_detector);
+  set envReleaseMs(double ms) => _setEnvRelease(_detector, ms);
 
   /// Opens the default mic and starts feeding the detector.
   /// Returns false if the device could not be opened.
