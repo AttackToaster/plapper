@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,18 +11,83 @@ import 'plounter_ffi.dart';
 
 void main() => runApp(const PlounterApp());
 
-// Blush + hot pink + lavender palette.
-const _bgTop = Color(0xFFFFF4F9);
-const _bgBottom = Color(0xFFFFDDEC);
-const _pink = Color(0xFFFF4F9A);
-const _pinkDeep = Color(0xFFE0187F);
-const _lavender = Color(0xFFB388EB);
-const _plum = Color(0xFF5C2B52);
-const _plumSoft = Color(0x995C2B52);
-
-const _wght = FontVariation('wght', 400);
 const _wghtSemi = FontVariation('wght', 600);
 const _wghtBold = FontVariation('wght', 700);
+
+/// A full look: background gradient, accents, text tones.
+class Palette {
+  const Palette({
+    required this.name,
+    required this.emoji,
+    required this.bgTop,
+    required this.bgBottom,
+    required this.accent,
+    required this.accentDeep,
+    required this.secondary,
+    required this.text,
+    this.card = const Color(0xBFFFFFFF),
+    Color? cardText,
+    this.floaties = const ['♡', '✧', '💗', '✦', '🎀', '♡', '✧', '♡'],
+    // ignore: prefer_initializing_formals — private field, named public param
+  }) : _cardText = cardText;
+
+  final String name;
+  final String emoji;
+  final Color bgTop, bgBottom, accent, accentDeep, secondary, text;
+  final Color card;
+  final Color? _cardText;
+  final List<String> floaties;
+
+  Color get cardText => _cardText ?? text;
+  Color get textSoft => text.withValues(alpha: 0.6);
+  Color get cardTextSoft => cardText.withValues(alpha: 0.6);
+}
+
+const palettes = [
+  Palette(
+    name: 'bubblegum',
+    emoji: '🍬',
+    bgTop: Color(0xFFFFF4F9),
+    bgBottom: Color(0xFFFFD9EB),
+    accent: Color(0xFFFF4F9A),
+    accentDeep: Color(0xFFE0187F),
+    secondary: Color(0xFFB388EB),
+    text: Color(0xFF5C2B52),
+  ),
+  Palette(
+    name: 'trans pride',
+    emoji: '🏳️‍⚧️',
+    bgTop: Color(0xFFEAF6FF),
+    bgBottom: Color(0xFFFFE4F1),
+    accent: Color(0xFFF48FB1),
+    accentDeep: Color(0xFFE85D93),
+    secondary: Color(0xFF55CDFC),
+    text: Color(0xFF4B3A5E),
+  ),
+  Palette(
+    name: 'lavender dream',
+    emoji: '💜',
+    bgTop: Color(0xFFF7F1FF),
+    bgBottom: Color(0xFFE7D6FF),
+    accent: Color(0xFFA968FF),
+    accentDeep: Color(0xFF8A3FFC),
+    secondary: Color(0xFFFF9BDD),
+    text: Color(0xFF43305C),
+  ),
+  Palette(
+    name: 'emo kitty',
+    emoji: '🖤',
+    bgTop: Color(0xFF140A11),
+    bgBottom: Color(0xFF321021),
+    accent: Color(0xFFFF2E88),
+    accentDeep: Color(0xFFFF0066),
+    secondary: Color(0xFF9BA0B0), // chrome silver
+    text: Color(0xFFFFD3E4),
+    card: Color(0xE6201018),
+    cardText: Color(0xFFFFC9DE),
+    floaties: ['🖤', '✧', '💀', '✦', '🎀', '♡', '⛓️', '🖤'],
+  ),
+];
 
 class PlounterApp extends StatelessWidget {
   const PlounterApp({super.key});
@@ -28,27 +95,14 @@ class PlounterApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Plounter',
+      title: 'plounter ♡',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
         fontFamily: 'Quicksand',
-        scaffoldBackgroundColor: _bgTop,
         colorScheme: ColorScheme.fromSeed(
-          seedColor: _pink,
+          seedColor: palettes.first.accent,
           brightness: Brightness.light,
-        ),
-        sliderTheme: SliderThemeData(
-          activeTrackColor: _pink,
-          inactiveTrackColor: _pink.withValues(alpha: 0.18),
-          thumbColor: _pinkDeep,
-          overlayColor: _pink.withValues(alpha: 0.15),
-        ),
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(
-            color: _plum,
-            fontVariations: [_wght],
-          ),
         ),
       ),
       home: const CounterPage(),
@@ -64,7 +118,7 @@ class CounterPage extends StatefulWidget {
 }
 
 class _CounterPageState extends State<CounterPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   Plounter? _plounter;
   String? _initError;
 
@@ -80,6 +134,15 @@ class _CounterPageState extends State<CounterPage>
   final List<double> _envHist = List.filled(_histLen, -120, growable: false);
   int _histHead = 0;
 
+  // Clap rate over a rolling 5 s window, and per-session bookkeeping.
+  // A session = one listening run (Start -> Stop).
+  static const _rateWindow = Duration(seconds: 5);
+  final List<DateTime> _clapTimes = [];
+  double _rate = 0;
+  int _sessionStart = 0; // total count when the session began
+  int _sessionClaps = 0;
+  int _bestSession = 0;
+
   // Milestone message: shown every N claps. "{count}" expands to the count.
   int _milestoneN = 10;
   final TextEditingController _milestoneCtrl =
@@ -88,12 +151,20 @@ class _CounterPageState extends State<CounterPage>
   Timer? _milestoneHide;
   SharedPreferences? _prefs;
 
+  int _paletteIdx = 0;
+  Palette get pal => palettes[_paletteIdx];
+
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 260),
     lowerBound: 1.0,
     upperBound: 1.22,
   );
+
+  late final AnimationController _drift = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 14),
+  )..repeat();
 
   @override
   void initState() {
@@ -114,6 +185,9 @@ class _CounterPageState extends State<CounterPage>
             prefs.getString('milestoneText') ?? _milestoneCtrl.text;
         _sensitivityDb = prefs.getDouble('sensitivityDb') ?? _sensitivityDb;
         _releaseMs = prefs.getDouble('releaseMs') ?? _releaseMs;
+        _bestSession = prefs.getInt('bestSession') ?? 0;
+        _paletteIdx =
+            (prefs.getInt('paletteIdx') ?? 0).clamp(0, palettes.length - 1);
       });
       _plounter?.sensitivityDb = _sensitivityDb;
       _plounter?.envReleaseMs = _releaseMs;
@@ -126,8 +200,34 @@ class _CounterPageState extends State<CounterPage>
     _milestoneHide?.cancel();
     _milestoneCtrl.dispose();
     _pulse.dispose();
+    _drift.dispose();
     _plounter?.dispose();
     super.dispose();
+  }
+
+  Future<void> _share() async {
+    final text = 'I got $_sessionClaps claps in one plounter session!! 👏💖'
+        '${_bestSession > 0 ? ' (best ever: $_bestSession)' : ''}';
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: pal.accentDeep,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        content: const Text(
+          'copied to clipboard — paste it anywhere 💖',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontFamily: 'Quicksand',
+            fontVariations: [_wghtSemi],
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
   }
 
   void _openSettings() {
@@ -139,17 +239,18 @@ class _CounterPageState extends State<CounterPage>
         builder: (context, setSheetState) {
           void both(VoidCallback fn) {
             setSheetState(fn);
-            setState(() {});
+            setState(fn);
           }
 
           return Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [_bgTop, _bgBottom],
+                colors: [pal.bgTop, pal.bgBottom],
               ),
-              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
             ),
             padding: EdgeInsets.only(
               left: 24,
@@ -165,24 +266,78 @@ class _CounterPageState extends State<CounterPage>
                     width: 44,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: _pink.withValues(alpha: 0.3),
+                      color: pal.accent.withValues(alpha: 0.35),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  const Text('settings ✧',
+                  const SizedBox(height: 8),
+                  Text('settings',
                       style: TextStyle(
-                        fontSize: 17,
-                        letterSpacing: 3,
-                        color: _plum,
-                        fontVariations: [_wghtBold],
+                        fontFamily: 'Pacifico',
+                        fontSize: 22,
+                        color: pal.text,
                       )),
                   const SizedBox(height: 14),
                   _LabeledCard(
-                    label: 'SENSITIVITY',
+                    pal: pal,
+                    label: 'theme ♡',
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        for (var i = 0; i < palettes.length; i++)
+                          GestureDetector(
+                            onTap: () {
+                              both(() => _paletteIdx = i);
+                              _prefs?.setInt('paletteIdx', i);
+                            },
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        palettes[i].accent,
+                                        palettes[i].secondary,
+                                      ],
+                                    ),
+                                    border: Border.all(
+                                      color: i == _paletteIdx
+                                          ? palettes[i].accentDeep
+                                          : Colors.transparent,
+                                      width: 3,
+                                    ),
+                                  ),
+                                  child: Center(
+                                      child: Text(palettes[i].emoji,
+                                          style: const TextStyle(
+                                              fontSize: 16))),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(palettes[i].name,
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: pal.textSoft,
+                                      fontVariations: const [_wghtSemi],
+                                    )),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
+                    label: 'sensitivity ♡',
                     trailing:
                         '+${_sensitivityDb.toStringAsFixed(0)} dB over room noise',
-                    child: Slider(
+                    child: _slider(
                       value: _sensitivityDb,
                       min: 3,
                       max: 40,
@@ -196,10 +351,11 @@ class _CounterPageState extends State<CounterPage>
                   ),
                   const SizedBox(height: 12),
                   _LabeledCard(
-                    label: 'SMOOTHING',
+                    pal: pal,
+                    label: 'smoothing ♡',
                     trailing:
                         'release ${_releaseMs.toStringAsFixed(0)} ms — lower keeps up with fast claps',
-                    child: Slider(
+                    child: _slider(
                       value: _releaseMs,
                       min: 5,
                       max: 80,
@@ -212,43 +368,45 @@ class _CounterPageState extends State<CounterPage>
                   ),
                   const SizedBox(height: 12),
                   _LabeledCard(
-                    label: 'MILESTONE MESSAGE',
+                    pal: pal,
+                    label: 'milestone message ♡',
                     trailing: 'every $_milestoneN claps',
                     child: Column(
                       children: [
                         TextField(
                           controller: _milestoneCtrl,
                           maxLength: 60,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 14,
-                            color: _plum,
-                            fontVariations: [_wghtSemi],
+                            color: pal.cardText,
+                            fontVariations: const [_wghtSemi],
                           ),
                           decoration: InputDecoration(
                             counterText: '',
                             isDense: true,
                             hintText: 'your message — {count} = clap count',
                             hintStyle: TextStyle(
-                                color: _plum.withValues(alpha: 0.35)),
+                                color: pal.cardText.withValues(alpha: 0.35)),
                             filled: true,
-                            fillColor: _pink.withValues(alpha: 0.06),
+                            fillColor: pal.accent.withValues(alpha: 0.06),
                             contentPadding: const EdgeInsets.symmetric(
                                 horizontal: 14, vertical: 10),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide(
-                                  color: _pink.withValues(alpha: 0.3)),
+                                  color:
+                                      pal.accent.withValues(alpha: 0.3)),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
-                              borderSide:
-                                  const BorderSide(color: _pink, width: 1.5),
+                              borderSide: BorderSide(
+                                  color: pal.accent, width: 1.5),
                             ),
                           ),
                           onChanged: (v) =>
                               _prefs?.setString('milestoneText', v),
                         ),
-                        Slider(
+                        _slider(
                           value: _milestoneN.toDouble(),
                           min: 2,
                           max: 100,
@@ -266,6 +424,32 @@ class _CounterPageState extends State<CounterPage>
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _slider({
+    required double value,
+    required double min,
+    required double max,
+    int? divisions,
+    required ValueChanged<double> onChanged,
+    ValueChanged<double>? onChangeEnd,
+  }) {
+    return SliderTheme(
+      data: SliderThemeData(
+        activeTrackColor: pal.accent,
+        inactiveTrackColor: pal.accent.withValues(alpha: 0.18),
+        thumbColor: pal.accentDeep,
+        overlayColor: pal.accent.withValues(alpha: 0.15),
+      ),
+      child: Slider(
+        value: value,
+        min: min,
+        max: max,
+        divisions: divisions,
+        onChanged: onChanged,
+        onChangeEnd: onChangeEnd,
       ),
     );
   }
@@ -292,7 +476,11 @@ class _CounterPageState extends State<CounterPage>
       p.stopListening();
       _poll?.cancel();
       _poll = null;
-      setState(() => _listening = false);
+      setState(() {
+        _listening = false;
+        _rate = 0;
+        _clapTimes.clear();
+      });
       return;
     }
 
@@ -313,15 +501,30 @@ class _CounterPageState extends State<CounterPage>
     setState(() {
       _listening = true;
       _micError = null;
+      _sessionStart = _count;
+      _sessionClaps = 0;
+      _clapTimes.clear();
+      _rate = 0;
     });
     _poll = Timer.periodic(const Duration(milliseconds: 33), (_) {
       final newCount = p.count;
+      final now = DateTime.now();
       if (newCount > _count) {
         _pulse.forward(from: 1.0).then((_) => _pulse.reverse());
         _maybeShowMilestone(_count, newCount);
+        for (var i = 0; i < newCount - _count; i++) {
+          _clapTimes.add(now);
+        }
       }
+      _clapTimes.removeWhere((t) => now.difference(t) > _rateWindow);
       setState(() {
         _count = newCount;
+        _rate = _clapTimes.length / _rateWindow.inSeconds;
+        _sessionClaps = newCount - _sessionStart;
+        if (_sessionClaps > _bestSession) {
+          _bestSession = _sessionClaps;
+          _prefs?.setInt('bestSession', _bestSession);
+        }
         _envDb = p.envelopeDb;
         _floorDb = p.noiseFloorDb;
         _envHist[_histHead] = _envDb;
@@ -347,184 +550,220 @@ class _CounterPageState extends State<CounterPage>
     final thresholdDb = _floorDb + _sensitivityDb;
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
+      body: AnimatedContainer(
+        duration: const Duration(milliseconds: 500),
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [_bgTop, _bgBottom],
+            colors: [pal.bgTop, pal.bgBottom],
           ),
         ),
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 560),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-                child: Column(
-                  children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        const _Wordmark(),
-                        Positioned(
-                          right: 0,
-                          child: IconButton(
-                            tooltip: 'Settings',
-                            onPressed: _openSettings,
-                            icon: const Icon(Icons.tune_rounded,
-                                color: _plumSoft),
-                          ),
-                        ),
-                      ],
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: _drift,
+                  builder: (context, _) => CustomPaint(
+                    painter: _FloatiesPainter(
+                      t: _drift.value,
+                      pal: pal,
+                      lively: _listening,
                     ),
-                    const Spacer(),
-                    _SparkleRow(pulse: _pulse),
-                    ScaleTransition(
-                      scale: _pulse,
-                      child: ShaderMask(
-                        shaderCallback: (bounds) => const LinearGradient(
-                          colors: [_pinkDeep, _lavender],
-                        ).createShader(bounds),
-                        child: Text(
-                          '$_count',
-                          style: const TextStyle(
-                            fontSize: 128,
-                            height: 1.0,
-                            color: Colors.white,
-                            fontVariations: [_wghtBold],
-                            fontFeatures: [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Text(_count == 1 ? 'clap 💖' : 'claps 💖',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          letterSpacing: 3,
-                          color: _plumSoft,
-                          fontVariations: [_wghtSemi],
-                        )),
-                    SizedBox(
-                      height: 46,
-                      child: Center(
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 300),
-                          transitionBuilder: (child, anim) => FadeTransition(
-                            opacity: anim,
-                            child: ScaleTransition(scale: anim, child: child),
-                          ),
-                          child: _milestoneShown == null
-                              ? const SizedBox.shrink()
-                              : Container(
-                                  key: ValueKey(_milestoneShown),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 20, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                        colors: [_pink, _lavender]),
-                                    borderRadius: BorderRadius.circular(30),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color:
-                                            _pink.withValues(alpha: 0.35),
-                                        blurRadius: 14,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Text(
-                                    _milestoneShown!,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 15,
-                                      fontVariations: [_wghtBold],
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    _LabeledCard(
-                      label: 'ENVELOPE — LAST 4 S',
-                      trailing: _listening
-                          ? '${_envDb.toStringAsFixed(0)} dB'
-                          : 'mic off',
-                      child: EnvelopeGraph(
-                        history: _envHist,
-                        head: _histHead,
-                        floorDb: _listening ? _floorDb : -120,
-                        thresholdDb: _listening ? thresholdDb : -120,
-                      ),
-                    ),
-                    if (_micError != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: Text(_micError!,
-                            style: const TextStyle(color: _pinkDeep)),
-                      ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FilledButton.icon(
-                          style: FilledButton.styleFrom(
-                            backgroundColor:
-                                _listening ? Colors.white : _pink,
-                            foregroundColor:
-                                _listening ? _pinkDeep : Colors.white,
-                            shape: const StadiumBorder(),
-                            elevation: _listening ? 0 : 3,
-                            shadowColor: _pink.withValues(alpha: 0.5),
-                            side: _listening
-                                ? const BorderSide(color: _pink, width: 1.5)
-                                : BorderSide.none,
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 30, vertical: 20),
-                            textStyle: const TextStyle(
-                              fontFamily: 'Quicksand',
-                              fontVariations: [_wghtBold],
-                              fontSize: 15,
-                            ),
-                          ),
-                          onPressed: _toggleListening,
-                          icon: Icon(_listening ? Icons.mic_off : Icons.mic),
-                          label: Text(_listening
-                              ? 'Stop listening'
-                              : 'Start listening'),
-                        ),
-                        const SizedBox(width: 16),
-                        OutlinedButton.icon(
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: _plum,
-                            shape: const StadiumBorder(),
-                            side: BorderSide(
-                                color: _plum.withValues(alpha: 0.35)),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 26, vertical: 20),
-                            textStyle: const TextStyle(
-                              fontFamily: 'Quicksand',
-                              fontVariations: [_wghtSemi],
-                              fontSize: 15,
-                            ),
-                          ),
-                          onPressed: () {
-                            _plounter?.resetCount();
-                            setState(() => _count = 0);
-                          },
-                          icon: const Icon(Icons.restart_alt),
-                          label: const Text('Reset count'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ),
+            SafeArea(
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 32, vertical: 24),
+                    child: Column(
+                      children: [
+                        Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            _Wordmark(pal: pal),
+                            Positioned(
+                              right: 0,
+                              child: IconButton(
+                                tooltip: 'Settings',
+                                onPressed: _openSettings,
+                                icon: Icon(Icons.tune_rounded,
+                                    color: pal.textSoft),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        _SparkleRow(pulse: _pulse),
+                        ScaleTransition(
+                          scale: _pulse,
+                          child: ShaderMask(
+                            shaderCallback: (bounds) => LinearGradient(
+                              colors: [pal.accentDeep, pal.secondary],
+                            ).createShader(bounds),
+                            child: Text(
+                              '$_count',
+                              style: const TextStyle(
+                                fontSize: 128,
+                                height: 1.0,
+                                color: Colors.white,
+                                fontVariations: [_wghtBold],
+                                fontFeatures: [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Text(_count == 1 ? 'clap' : 'claps',
+                            style: TextStyle(
+                              fontFamily: 'Pacifico',
+                              fontSize: 22,
+                              color: pal.textSoft,
+                            )),
+                        SizedBox(
+                          height: 46,
+                          child: Center(
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 300),
+                              transitionBuilder: (child, anim) =>
+                                  FadeTransition(
+                                opacity: anim,
+                                child: ScaleTransition(
+                                    scale: anim, child: child),
+                              ),
+                              child: _milestoneShown == null
+                                  ? const SizedBox.shrink()
+                                  : Container(
+                                      key: ValueKey(_milestoneShown),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 22, vertical: 7),
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(colors: [
+                                          pal.accent,
+                                          pal.secondary
+                                        ]),
+                                        borderRadius:
+                                            BorderRadius.circular(30),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: pal.accent
+                                                .withValues(alpha: 0.35),
+                                            blurRadius: 14,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
+                                      ),
+                                      child: Text(
+                                        _milestoneShown!,
+                                        style: const TextStyle(
+                                          fontFamily: 'Pacifico',
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _StatChip(
+                                pal: pal,
+                                emoji: '👏',
+                                label: 'this session',
+                                value: '$_sessionClaps'),
+                            const SizedBox(width: 10),
+                            _StatChip(
+                                pal: pal,
+                                emoji: '⚡',
+                                label: 'claps / sec',
+                                value: _rate.toStringAsFixed(1)),
+                            const SizedBox(width: 10),
+                            _StatChip(
+                                pal: pal,
+                                emoji: '🏆',
+                                label: 'best session',
+                                value: '$_bestSession'),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        _LabeledCard(
+                          pal: pal,
+                          label: 'envelope — last 4 s',
+                          trailing: _listening
+                              ? '${_envDb.toStringAsFixed(0)} dB'
+                              : 'mic off',
+                          child: EnvelopeGraph(
+                            history: _envHist,
+                            head: _histHead,
+                            floorDb: _listening ? _floorDb : -120,
+                            thresholdDb: _listening ? thresholdDb : -120,
+                            palette: pal,
+                          ),
+                        ),
+                        if (_micError != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: Text(_micError!,
+                                style: TextStyle(color: pal.accentDeep)),
+                          ),
+                        const SizedBox(height: 24),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _GradientPill(
+                              pal: pal,
+                              outlined: _listening,
+                              icon: _listening
+                                  ? Icons.mic_off_rounded
+                                  : Icons.favorite_rounded,
+                              label: _listening
+                                  ? 'stop listening'
+                                  : 'start listening',
+                              onTap: _toggleListening,
+                            ),
+                            const SizedBox(width: 14),
+                            _GradientPill(
+                              pal: pal,
+                              outlined: true,
+                              icon: Icons.restart_alt_rounded,
+                              label: 'reset',
+                              onTap: () {
+                                _plounter?.resetCount();
+                                setState(() {
+                                  _count = 0;
+                                  _sessionStart = 0;
+                                  _sessionClaps = 0;
+                                  _clapTimes.clear();
+                                  _rate = 0;
+                                });
+                              },
+                            ),
+                            const SizedBox(width: 14),
+                            _GradientPill(
+                              pal: pal,
+                              outlined: true,
+                              icon: Icons.ios_share_rounded,
+                              label: 'share',
+                              onTap: _share,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -532,29 +771,30 @@ class _CounterPageState extends State<CounterPage>
 }
 
 class _Wordmark extends StatelessWidget {
-  const _Wordmark();
+  const _Wordmark({required this.pal});
+
+  final Palette pal;
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const Text('✧ ', style: TextStyle(fontSize: 18, color: _lavender)),
+        Text('✧ ', style: TextStyle(fontSize: 18, color: pal.secondary)),
         ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [_pinkDeep, _lavender],
+          shaderCallback: (bounds) => LinearGradient(
+            colors: [pal.accentDeep, pal.secondary],
           ).createShader(bounds),
           child: const Text(
             'plounter',
             style: TextStyle(
-              fontSize: 26,
-              letterSpacing: 6,
+              fontFamily: 'Pacifico',
+              fontSize: 30,
               color: Colors.white,
-              fontVariations: [_wghtBold],
             ),
           ),
         ),
-        const Text(' ✧', style: TextStyle(fontSize: 18, color: _lavender)),
+        Text(' ♡', style: TextStyle(fontSize: 20, color: pal.accent)),
       ],
     );
   }
@@ -584,9 +824,181 @@ class _SparkleRow extends StatelessWidget {
   }
 }
 
-class _LabeledCard extends StatelessWidget {
-  const _LabeledCard({required this.label, required this.child, this.trailing});
+/// Hearts and sparkles drifting up the background.
+class _FloatiesPainter extends CustomPainter {
+  _FloatiesPainter({required this.t, required this.pal, required this.lively});
 
+  final double t;
+  final Palette pal;
+  final bool lively;
+
+  static const _emojiGlyphs = {'💗', '🎀', '🖤', '💀', '⛓️'};
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rng = math.Random(7);
+    const n = 16;
+    for (var i = 0; i < n; i++) {
+      final baseX = rng.nextDouble();
+      final speed = 0.5 + rng.nextDouble() * 0.9;
+      final phase = rng.nextDouble();
+      final wobble = rng.nextDouble() * 24;
+      final fontSize = 10.0 + rng.nextDouble() * 14;
+      final glyph = pal.floaties[i % pal.floaties.length];
+
+      final progress = (t * speed + phase) % 1.0;
+      final y = size.height * (1.05 - progress * 1.1);
+      final x = baseX * size.width +
+          math.sin((t * speed + phase) * 2 * math.pi * 2) * wobble;
+
+      // fade at both ends of the journey
+      final edge = math.min(progress, 1 - progress).clamp(0.0, 0.25) / 0.25;
+      final alpha = edge * (lively ? 0.5 : 0.22);
+      if (alpha <= 0.01) continue;
+
+      final isEmoji = _emojiGlyphs.contains(glyph);
+      final tp = TextPainter(
+        text: TextSpan(
+          text: glyph,
+          style: TextStyle(
+            fontSize: fontSize,
+            color: isEmoji
+                ? Colors.white.withValues(alpha: alpha)
+                : (i.isEven ? pal.accent : pal.secondary)
+                    .withValues(alpha: alpha),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(x, y));
+    }
+  }
+
+  @override
+  bool shouldRepaint(_FloatiesPainter old) => true;
+}
+
+class _GradientPill extends StatelessWidget {
+  const _GradientPill({
+    required this.pal,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.outlined = false,
+  });
+
+  final Palette pal;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool outlined;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = outlined ? pal.accentDeep : Colors.white;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(40),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: outlined
+                ? null
+                : LinearGradient(colors: [pal.accentDeep, pal.secondary]),
+            color: outlined ? pal.card : null,
+            border: outlined
+                ? Border.all(color: pal.accent.withValues(alpha: 0.6))
+                : null,
+            borderRadius: BorderRadius.circular(40),
+            boxShadow: outlined
+                ? null
+                : [
+                    BoxShadow(
+                      color: pal.accent.withValues(alpha: 0.45),
+                      blurRadius: 16,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+          ),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 19, color: fg),
+                const SizedBox(width: 8),
+                Text(label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: fg,
+                      fontVariations: const [_wghtBold],
+                    )),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.pal,
+    required this.emoji,
+    required this.label,
+    required this.value,
+  });
+
+  final Palette pal;
+  final String emoji;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      decoration: BoxDecoration(
+        color: pal.card,
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(color: pal.accent.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 14)),
+          const SizedBox(width: 6),
+          Text(value,
+              style: TextStyle(
+                fontSize: 14,
+                color: pal.cardText,
+                fontVariations: const [_wghtBold],
+              )),
+          const SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(
+                fontSize: 11,
+                color: pal.cardTextSoft,
+                fontVariations: const [_wghtSemi],
+              )),
+        ],
+      ),
+    );
+  }
+}
+
+class _LabeledCard extends StatelessWidget {
+  const _LabeledCard({
+    required this.pal,
+    required this.label,
+    required this.child,
+    this.trailing,
+  });
+
+  final Palette pal;
   final String label;
   final String? trailing;
   final Widget child;
@@ -595,12 +1007,12 @@ class _LabeledCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.75),
+        color: pal.card,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _pink.withValues(alpha: 0.25)),
+        border: Border.all(color: pal.accent.withValues(alpha: 0.25)),
         boxShadow: [
           BoxShadow(
-            color: _pink.withValues(alpha: 0.12),
+            color: pal.accent.withValues(alpha: 0.12),
             blurRadius: 18,
             offset: const Offset(0, 6),
           ),
@@ -613,19 +1025,19 @@ class _LabeledCard extends StatelessWidget {
           Row(
             children: [
               Text(label,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    letterSpacing: 2,
-                    color: _plumSoft,
-                    fontVariations: [_wghtBold],
+                  style: TextStyle(
+                    fontSize: 12,
+                    letterSpacing: 1.5,
+                    color: pal.cardTextSoft,
+                    fontVariations: const [_wghtBold],
                   )),
               const Spacer(),
               if (trailing != null)
                 Text(trailing!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: _plumSoft,
-                      fontVariations: [_wghtSemi],
+                      color: pal.cardTextSoft,
+                      fontVariations: const [_wghtSemi],
                     )),
             ],
           ),
@@ -638,7 +1050,7 @@ class _LabeledCard extends StatelessWidget {
 }
 
 /// Scrolling envelope history (detection band, dBFS -90..-10) with the
-/// noise floor (lavender) and trigger threshold (hot pink) drawn as lines.
+/// noise floor and trigger threshold drawn as lines.
 class EnvelopeGraph extends StatelessWidget {
   const EnvelopeGraph({
     super.key,
@@ -646,6 +1058,7 @@ class EnvelopeGraph extends StatelessWidget {
     required this.head,
     required this.floorDb,
     required this.thresholdDb,
+    this.palette,
   });
 
   /// Ring buffer of envelope dB values; [head] is the write position
@@ -654,6 +1067,7 @@ class EnvelopeGraph extends StatelessWidget {
   final int head;
   final double floorDb;
   final double thresholdDb;
+  final Palette? palette;
 
   @override
   Widget build(BuildContext context) {
@@ -661,18 +1075,20 @@ class EnvelopeGraph extends StatelessWidget {
       height: 96,
       child: CustomPaint(
         size: Size.infinite,
-        painter: _GraphPainter(List.of(history), head, floorDb, thresholdDb),
+        painter: _GraphPainter(List.of(history), head, floorDb, thresholdDb,
+            palette ?? palettes.first),
       ),
     );
   }
 }
 
 class _GraphPainter extends CustomPainter {
-  _GraphPainter(this.hist, this.head, this.floorDb, this.thresholdDb);
+  _GraphPainter(this.hist, this.head, this.floorDb, this.thresholdDb, this.pal);
 
   final List<double> hist;
   final int head;
   final double floorDb, thresholdDb;
+  final Palette pal;
 
   static const double _top = -10, _bottom = -90;
 
@@ -681,7 +1097,7 @@ class _GraphPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final bg = Paint()..color = _pink.withValues(alpha: 0.05);
+    final bg = Paint()..color = pal.accent.withValues(alpha: 0.05);
     canvas.drawRRect(
         RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(12)),
         bg);
@@ -693,8 +1109,8 @@ class _GraphPainter extends CustomPainter {
           Rect.fromLTWH(0, y - 0.75, size.width, 1.5), Paint()..color = color);
     }
 
-    hline(floorDb, _lavender.withValues(alpha: 0.6));
-    hline(thresholdDb, _pinkDeep.withValues(alpha: 0.85));
+    hline(floorDb, pal.secondary.withValues(alpha: 0.7));
+    hline(thresholdDb, pal.accentDeep.withValues(alpha: 0.85));
 
     final n = hist.length;
     final path = Path();
@@ -714,11 +1130,12 @@ class _GraphPainter extends CustomPainter {
       ..lineTo(size.width, size.height)
       ..close();
 
-    canvas.drawPath(fillPath, Paint()..color = _pink.withValues(alpha: 0.14));
+    canvas.drawPath(
+        fillPath, Paint()..color = pal.accent.withValues(alpha: 0.14));
     canvas.drawPath(
         path,
         Paint()
-          ..color = _pink
+          ..color = pal.accent
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.8);
   }

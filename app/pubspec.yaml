@@ -65,6 +65,9 @@ flutter:
     - family: Quicksand
       fonts:
         - asset: fonts/Quicksand.ttf
+    - family: Pacifico
+      fonts:
+        - asset: fonts/Pacifico.ttf
 
   # To add assets to your application, add an assets section, like this:
   # assets:
