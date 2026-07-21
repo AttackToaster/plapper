@@ -1808,6 +1808,7 @@ class _GradientPill extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        canRequestFocus: false,
         borderRadius: BorderRadius.circular(40),
         child: Ink(
           decoration: BoxDecoration(
