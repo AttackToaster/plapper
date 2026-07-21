@@ -35,9 +35,13 @@ jobs:
       - run: flutter build windows --release
         working-directory: app
       - run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath plapper-windows-x64.zip
+      - name: Build NSIS installer
+        run: makensis /DBUNDLE=app\build\windows\x64\runner\Release installer\windows.nsi
       - uses: softprops/action-gh-release@v2
         with:
-          files: plapper-windows-x64.zip
+          files: |
+            plapper-windows-x64.zip
+            plapper-setup-windows-x64.exe
 
   macos:
     runs-on: macos-latest
@@ -50,9 +54,17 @@ jobs:
       - run: flutter build macos --release
         working-directory: app
       - run: ditto -c -k --keepParent app/build/macos/Build/Products/Release/plapper.app plapper-macos.zip
+      - name: Build DMG
+        run: |
+          mkdir dmg-staging
+          cp -R app/build/macos/Build/Products/Release/plapper.app dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create -volname plapper -srcfolder dmg-staging -ov -format UDZO plapper-macos.dmg
       - uses: softprops/action-gh-release@v2
         with:
-          files: plapper-macos.zip
+          files: |
+            plapper-macos.zip
+            plapper-macos.dmg
 
   ios:
     runs-on: macos-latest
