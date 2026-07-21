@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'plapper_native'
-  s.version          = '1.0.0'
+  s.version          = '1.1.0'
   s.summary          = 'plapper clap-detection core (iOS build).'
   s.description      = <<-DESC
 Builds the shared plapper C++ DSP core + miniaudio capture for iOS.

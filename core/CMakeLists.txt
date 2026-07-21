@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(plapper_core VERSION 1.0.0 LANGUAGES C CXX)
+project(plapper_core VERSION 1.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -12,7 +12,7 @@ option(PLAPPER_SHARED "Build shared library (FFI use)" ON)
 
 set(PLAPPER_SOURCES src/detector.cpp src/plapper.cpp)
 if(PLAPPER_BUILD_CAPTURE)
-  list(APPEND PLAPPER_SOURCES capture/capture.cpp)
+  list(APPEND PLAPPER_SOURCES capture/capture.cpp src/sound.cpp)
 endif()
 
 if(PLAPPER_SHARED)

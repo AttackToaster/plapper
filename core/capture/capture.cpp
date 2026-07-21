@@ -1,7 +1,7 @@
 #include "../include/plapper/plapper_capture.h"
 
 #define MINIAUDIO_IMPLEMENTATION
-#define MA_NO_DECODING
+/* decoding stays enabled: ma_engine (src/sound.cpp) needs it for WAV files */
 #define MA_NO_GENERATION
 #include "miniaudio.h"
 

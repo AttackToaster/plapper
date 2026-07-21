@@ -4,14 +4,30 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:local_notifier/local_notifier.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
+import 'features/challenge.dart';
+import 'features/discord_rpc.dart';
+import 'features/goal.dart';
+import 'features/history.dart';
+import 'features/replay.dart';
+import 'features/sound_ffi.dart';
+import 'palette.dart';
 import 'plapper_ffi.dart';
 
-void main() {
+bool get _desktop => Platform.isLinux || Platform.isWindows || Platform.isMacOS;
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   _migratePlounterPrefs();
+  if (_desktop) {
+    await windowManager.ensureInitialized();
+    await localNotifier.setup(appName: 'plapper');
+  }
   runApp(const PlapperApp());
 }
 
@@ -33,129 +49,6 @@ void _migratePlounterPrefs() {
     // migration is best-effort; a fresh profile is an acceptable fallback
   }
 }
-
-const _wghtSemi = FontVariation('wght', 600);
-const _wghtBold = FontVariation('wght', 700);
-
-/// A full look: background gradient, accents, text tones.
-class Palette {
-  const Palette({
-    required this.name,
-    required this.emoji,
-    required this.bgTop,
-    required this.bgBottom,
-    required this.accent,
-    required this.accentDeep,
-    required this.secondary,
-    required this.text,
-    this.card = const Color(0xBFFFFFFF),
-    Color? cardText,
-    this.floaties = const ['♡', '✧', '💗', '✦', '🎀', '♡', '✧', '♡'],
-    this.unlockAt = 0,
-    // ignore: prefer_initializing_formals — private field, named public param
-  }) : _cardText = cardText;
-
-  final String name;
-  final String emoji;
-  final Color bgTop, bgBottom, accent, accentDeep, secondary, text;
-  final Color card;
-  final Color? _cardText;
-  final List<String> floaties;
-
-  /// Lifetime claps needed to unlock this theme.
-  final int unlockAt;
-
-  Color get cardText => _cardText ?? text;
-  Color get textSoft => text.withValues(alpha: 0.6);
-  Color get cardTextSoft => cardText.withValues(alpha: 0.6);
-}
-
-const palettes = [
-  Palette(
-    name: 'bubblegum',
-    emoji: '🍬',
-    bgTop: Color(0xFFFFF4F9),
-    bgBottom: Color(0xFFFFD9EB),
-    accent: Color(0xFFFF4F9A),
-    accentDeep: Color(0xFFE0187F),
-    secondary: Color(0xFFB388EB),
-    text: Color(0xFF5C2B52),
-  ),
-  Palette(
-    name: 'trans pride',
-    emoji: '🏳️‍⚧️',
-    bgTop: Color(0xFFEAF6FF),
-    bgBottom: Color(0xFFFFE4F1),
-    accent: Color(0xFFF48FB1),
-    accentDeep: Color(0xFFE85D93),
-    secondary: Color(0xFF55CDFC),
-    text: Color(0xFF4B3A5E),
-    unlockAt: 25,
-  ),
-  Palette(
-    name: 'lavender dream',
-    emoji: '💜',
-    bgTop: Color(0xFFF7F1FF),
-    bgBottom: Color(0xFFE7D6FF),
-    accent: Color(0xFFA968FF),
-    accentDeep: Color(0xFF8A3FFC),
-    secondary: Color(0xFFFF9BDD),
-    text: Color(0xFF43305C),
-    unlockAt: 75,
-  ),
-  Palette(
-    name: 'emo kitty',
-    emoji: '🖤',
-    bgTop: Color(0xFF140A11),
-    bgBottom: Color(0xFF321021),
-    accent: Color(0xFFFF2E88),
-    accentDeep: Color(0xFFFF0066),
-    secondary: Color(0xFF9BA0B0), // chrome silver
-    text: Color(0xFFFFD3E4),
-    card: Color(0xE6201018),
-    cardText: Color(0xFFFFC9DE),
-    floaties: ['🖤', '✧', '💀', '✦', '🎀', '♡', '⛓️', '🖤'],
-    unlockAt: 150,
-  ),
-  Palette(
-    name: 'scene queen',
-    emoji: '💚',
-    bgTop: Color(0xFF17101E),
-    bgBottom: Color(0xFF261337),
-    accent: Color(0xFFFF3FA4),
-    accentDeep: Color(0xFFFF1493),
-    secondary: Color(0xFF76FF03), // neon lime
-    text: Color(0xFFEBD6FF),
-    card: Color(0xE61E1428),
-    cardText: Color(0xFFE8D9F5),
-    floaties: ['💚', '✧', '🦝', '✦', '💕', '♡', '⭐', '💚'],
-    unlockAt: 300,
-  ),
-  Palette(
-    name: 'y2k cyber',
-    emoji: '🦋',
-    bgTop: Color(0xFFE8F4FF),
-    bgBottom: Color(0xFFE2DcFF),
-    accent: Color(0xFF00A8E8),
-    accentDeep: Color(0xFF0077D6),
-    secondary: Color(0xFFFF6EC7), // holo pink
-    text: Color(0xFF2E3A5C),
-    floaties: ['🦋', '✧', '💿', '✦', '🫧', '♡', '⭐', '🦋'],
-    unlockAt: 500,
-  ),
-  Palette(
-    name: 'cottage-core',
-    emoji: '🍄',
-    bgTop: Color(0xFFF9F6E9),
-    bgBottom: Color(0xFFDDEBD2),
-    accent: Color(0xFFE86A8A), // strawberry
-    accentDeep: Color(0xFFD04A6E),
-    secondary: Color(0xFF7FAE7C), // sage
-    text: Color(0xFF4E4034),
-    floaties: ['🍓', '✧', '🍄', '✦', '🌼', '♡', '🐝', '🍓'],
-    unlockAt: 1000,
-  ),
-];
 
 class PlapperApp extends StatelessWidget {
   const PlapperApp({super.key});
@@ -186,7 +79,7 @@ class CounterPage extends StatefulWidget {
 }
 
 class _CounterPageState extends State<CounterPage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, WindowListener {
   Plapper? _plapper;
   String? _initError;
 
@@ -210,6 +103,59 @@ class _CounterPageState extends State<CounterPage>
   int _sessionStart = 0; // total count when the session began
   int _sessionClaps = 0;
   int _bestSession = 0;
+  double _sessionPeakRate = 0;
+  DateTime? _sessionStartedAt;
+  HistoryStore? _history;
+  final List<int> _plapOffsets = [];
+  PlapSession? _lastSession;
+
+  // Goal mode: per-session target; null = off.
+  int? _goal;
+  bool _goalReached = false;
+
+  // Celebration chimes (asset paths materialized once for the C side).
+  String? _sndMilestone, _sndGoal;
+
+  // Plap reminders: periodic nudge notification while the app runs
+  // (open or minimized). No close-to-background: without a tray icon
+  // (xfce, no appindicator) a hidden window is unreachable.
+  int _remindMins = 0;
+  Timer? _remindTimer;
+
+  void _scheduleReminders() {
+    _remindTimer?.cancel();
+    _remindTimer = null;
+    if (_remindMins <= 0) return;
+    _remindTimer = Timer.periodic(Duration(minutes: _remindMins), (_) {
+      if (_listening || !_desktop) return;
+      final n = LocalNotification(
+        title: 'plap o\'clock ♡',
+        body:
+            'psst, $_petName… it\'s been $_remindMins minutes. '
+            'time to plap 👏💖',
+      );
+      n.onClick = () {
+        windowManager.show();
+        windowManager.focus();
+      };
+      n.show();
+    });
+  }
+
+  // Discord rich presence (desktop; needs the user's own application id).
+  DiscordRpc? _rpc;
+  final TextEditingController _discordIdCtrl = TextEditingController();
+  DateTime _lastRpcPush = DateTime.fromMillisecondsSinceEpoch(0);
+
+  void _rebuildRpc() {
+    _rpc?.dispose();
+    _rpc = null;
+    final id = _discordIdCtrl.text.trim();
+    if (id.isNotEmpty && _isDesktop) {
+      _rpc = DiscordRpc(id);
+      unawaited(_rpc!.connect());
+    }
+  }
 
   // Milestone message: shown every N claps. "{count}" expands to the count.
   int _milestoneN = 10;
@@ -272,7 +218,7 @@ class _CounterPageState extends State<CounterPage>
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontFamily: 'Quicksand',
-            fontVariations: [_wghtSemi],
+            fontVariations: [wghtSemi],
             color: Colors.white,
           ),
         ),
@@ -454,7 +400,7 @@ class _CounterPageState extends State<CounterPage>
                             style: TextStyle(
                               color: pal.text,
                               fontSize: 13,
-                              fontVariations: const [_wghtSemi],
+                              fontVariations: const [wghtSemi],
                             ),
                           ),
                           subtitle: Text(
@@ -513,8 +459,26 @@ class _CounterPageState extends State<CounterPage>
   String get _petName =>
       _petNameCtrl.text.trim().isEmpty ? 'cutie' : _petNameCtrl.text.trim();
 
-  String _praiseLine() =>
-      _praise[_rng.nextInt(_praise.length)].replaceAll('{name}', _petName);
+  /// User-editable praise pool (one line per entry); falls back to defaults.
+  late final TextEditingController _praiseCtrl = TextEditingController(
+    text: _praise.join('\n'),
+  );
+
+  List<String> get _praisePool {
+    final lines = _praiseCtrl.text
+        .split('\n')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    return lines.isEmpty ? _praise : lines;
+  }
+
+  String _praiseLine() {
+    final pool = _praisePool;
+    return pool[_rng.nextInt(pool.length)]
+        .replaceAll('{name}', _petName)
+        .replaceAll('{count}', '$_sessionClaps');
+  }
 
   String get _title {
     var t = _titleLadder.first.$2;
@@ -551,7 +515,7 @@ class _CounterPageState extends State<CounterPage>
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: 'Quicksand',
-              fontVariations: [_wghtSemi],
+              fontVariations: [wghtSemi],
               color: Colors.white,
             ),
           ),
@@ -585,7 +549,7 @@ class _CounterPageState extends State<CounterPage>
           textAlign: TextAlign.center,
           style: const TextStyle(
             fontFamily: 'Quicksand',
-            fontVariations: [_wghtSemi],
+            fontVariations: [wghtSemi],
             color: Colors.white,
           ),
         ),
@@ -617,7 +581,7 @@ class _CounterPageState extends State<CounterPage>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontFamily: 'Quicksand',
-                  fontVariations: [_wghtSemi],
+                  fontVariations: [wghtSemi],
                   color: Colors.white,
                 ),
               ),
@@ -658,6 +622,7 @@ class _CounterPageState extends State<CounterPage>
   @override
   void initState() {
     super.initState();
+    if (_desktop) windowManager.addListener(this);
     try {
       _plapper = Plapper();
       _sensitivityDb = _plapper!.sensitivityDb;
@@ -667,6 +632,7 @@ class _CounterPageState extends State<CounterPage>
     }
     SharedPreferences.getInstance().then((prefs) {
       _prefs = prefs;
+      _history = HistoryStore(prefs);
       if (!mounted) return;
       setState(() {
         _milestoneN = prefs.getInt('milestoneN') ?? _milestoneN;
@@ -678,6 +644,19 @@ class _CounterPageState extends State<CounterPage>
         _lifetime = prefs.getInt('lifetimeClaps') ?? 0;
         _petNameCtrl.text = prefs.getString('petName') ?? '';
         _floatiesCtrl.text = prefs.getString('customFloaties') ?? '';
+        _praiseCtrl.text = prefs.getString('praiseLines') ?? _praise.join('\n');
+        final g = prefs.getInt('goalN') ?? 0;
+        _goal = g > 0 ? g : null;
+        _discordIdCtrl.text = prefs.getString('discordClientId') ?? '';
+        _remindMins = prefs.getInt('remindMins') ?? 0;
+      });
+      _scheduleReminders();
+      _rebuildRpc();
+      materializeAsset(
+        'assets/sounds/milestone.wav',
+      ).then((p) => _sndMilestone = p);
+      materializeAsset('assets/sounds/goal.wav').then((p) => _sndGoal = p);
+      setState(() {
         _paletteIdx = (prefs.getInt('paletteIdx') ?? 0).clamp(
           0,
           palettes.length - 1,
@@ -695,6 +674,11 @@ class _CounterPageState extends State<CounterPage>
     _milestoneCtrl.dispose();
     _petNameCtrl.dispose();
     _floatiesCtrl.dispose();
+    _praiseCtrl.dispose();
+    _discordIdCtrl.dispose();
+    _rpc?.dispose();
+    _remindTimer?.cancel();
+    if (_desktop) windowManager.removeListener(this);
     _pulse.dispose();
     _drift.dispose();
     _burst.dispose();
@@ -720,7 +704,7 @@ class _CounterPageState extends State<CounterPage>
           textAlign: TextAlign.center,
           style: TextStyle(
             fontFamily: 'Quicksand',
-            fontVariations: [_wghtSemi],
+            fontVariations: [wghtSemi],
             color: Colors.white,
           ),
         ),
@@ -783,7 +767,7 @@ class _CounterPageState extends State<CounterPage>
                     style: TextStyle(
                       fontSize: 11,
                       color: pal.textSoft,
-                      fontVariations: const [_wghtSemi],
+                      fontVariations: const [wghtSemi],
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -817,7 +801,7 @@ class _CounterPageState extends State<CounterPage>
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(
                                         fontFamily: 'Quicksand',
-                                        fontVariations: [_wghtSemi],
+                                        fontVariations: [wghtSemi],
                                         color: Colors.white,
                                       ),
                                     ),
@@ -867,7 +851,7 @@ class _CounterPageState extends State<CounterPage>
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: pal.textSoft,
-                                      fontVariations: const [_wghtSemi],
+                                      fontVariations: const [wghtSemi],
                                     ),
                                   ),
                                 ],
@@ -888,7 +872,7 @@ class _CounterPageState extends State<CounterPage>
                       style: TextStyle(
                         fontSize: 14,
                         color: pal.cardText,
-                        fontVariations: const [_wghtSemi],
+                        fontVariations: const [wghtSemi],
                       ),
                       decoration: InputDecoration(
                         counterText: '',
@@ -920,6 +904,47 @@ class _CounterPageState extends State<CounterPage>
                   const SizedBox(height: 12),
                   _LabeledCard(
                     pal: pal,
+                    label: 'praise lines ♡',
+                    trailing: 'one per line · {name} + {count} work',
+                    child: TextField(
+                      controller: _praiseCtrl,
+                      minLines: 3,
+                      maxLines: 7,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: pal.cardText,
+                        fontVariations: const [wghtSemi],
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText:
+                            'write your own — as sweet or spicy as you like',
+                        hintStyle: TextStyle(
+                          color: pal.cardText.withValues(alpha: 0.35),
+                        ),
+                        filled: true,
+                        fillColor: pal.accent.withValues(alpha: 0.06),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: pal.accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: pal.accent, width: 1.5),
+                        ),
+                      ),
+                      onChanged: (v) => _prefs?.setString('praiseLines', v),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
                     label: 'background floaties ♡',
                     trailing: 'empty = theme default',
                     child: TextField(
@@ -928,7 +953,7 @@ class _CounterPageState extends State<CounterPage>
                       style: TextStyle(
                         fontSize: 14,
                         color: pal.cardText,
-                        fontVariations: const [_wghtSemi],
+                        fontVariations: const [wghtSemi],
                       ),
                       decoration: InputDecoration(
                         counterText: '',
@@ -986,7 +1011,7 @@ class _CounterPageState extends State<CounterPage>
                               foregroundColor: pal.accentDeep,
                               textStyle: const TextStyle(
                                 fontFamily: 'Quicksand',
-                                fontVariations: [_wghtSemi],
+                                fontVariations: [wghtSemi],
                                 fontSize: 12,
                               ),
                             ),
@@ -1043,7 +1068,7 @@ class _CounterPageState extends State<CounterPage>
                           style: TextStyle(
                             fontSize: 14,
                             color: pal.cardText,
-                            fontVariations: const [_wghtSemi],
+                            fontVariations: const [wghtSemi],
                           ),
                           decoration: InputDecoration(
                             counterText: '',
@@ -1085,6 +1110,142 @@ class _CounterPageState extends State<CounterPage>
                               _prefs?.setInt('milestoneN', v.round()),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
+                    label: 'plap reminders ♡',
+                    trailing: _remindMins == 0
+                        ? 'off'
+                        : 'every $_remindMins min while the app is open',
+                    child: _slider(
+                      value: _remindMins.toDouble(),
+                      min: 0,
+                      max: 120,
+                      divisions: 8,
+                      onChanged: (v) => both(() => _remindMins = v.round()),
+                      onChangeEnd: (v) {
+                        _prefs?.setInt('remindMins', v.round());
+                        _scheduleReminders();
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
+                    label: 'goal ♡',
+                    trailing: _goal == null
+                        ? 'off — plap freely'
+                        : '$_goal plaps per session',
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        style: TextButton.styleFrom(
+                          foregroundColor: pal.accentDeep,
+                        ),
+                        onPressed: () => showGoalPickerSheet(
+                          context,
+                          pal,
+                          currentGoal: _goal,
+                          onChanged: (g) {
+                            both(() {
+                              _goal = g;
+                              _goalReached = false;
+                            });
+                            _prefs?.setInt('goalN', g ?? 0);
+                          },
+                        ),
+                        icon: const Icon(Icons.flag_rounded, size: 16),
+                        label: Text(
+                          _goal == null ? 'set a goal' : 'change goal',
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
+                    label: 'plap codes ♡',
+                    trailing: 'share sessions as tiny codes',
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: pal.accentDeep,
+                          ),
+                          onPressed: () {
+                            final s = _lastSession;
+                            if (s == null) {
+                              _snack('no session to share yet — go plap 💖');
+                              return;
+                            }
+                            Clipboard.setData(
+                              ClipboardData(text: encodePlap(s)),
+                            );
+                            _snack('plap code copied 💌');
+                          },
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: const Text('copy last session'),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: pal.accentDeep,
+                          ),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            showPlapImportSheet(this.context, pal);
+                          },
+                          icon: const Icon(Icons.download_rounded, size: 16),
+                          label: const Text('watch a code'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _LabeledCard(
+                    pal: pal,
+                    label: 'discord presence ♡',
+                    trailing: _rpc == null
+                        ? 'off'
+                        : (_rpc!.connected ? 'connected 💜' : 'searching…'),
+                    child: TextField(
+                      controller: _discordIdCtrl,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: pal.cardText,
+                        fontVariations: const [wghtSemi],
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText:
+                            'your discord application id — free at discord.com/developers',
+                        hintStyle: TextStyle(
+                          color: pal.cardText.withValues(alpha: 0.35),
+                        ),
+                        filled: true,
+                        fillColor: pal.accent.withValues(alpha: 0.06),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(
+                            color: pal.accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(14),
+                          borderSide: BorderSide(color: pal.accent, width: 1.5),
+                        ),
+                      ),
+                      onChanged: (v) {
+                        _prefs?.setString('discordClientId', v);
+                        _rebuildRpc();
+                        both(() {});
+                      },
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -1167,6 +1328,7 @@ class _CounterPageState extends State<CounterPage>
     if (_milestoneN < 1 || newCount <= 0) return;
     if (newCount ~/ _milestoneN == oldCount ~/ _milestoneN) return;
     final reached = (newCount ~/ _milestoneN) * _milestoneN;
+    if (_sndMilestone != null) PlapperSound.play(_sndMilestone!);
     _showPill(
       _milestoneCtrl.text
           .replaceAll('{count}', '$reached')
@@ -1189,6 +1351,28 @@ class _CounterPageState extends State<CounterPage>
         _rate = 0;
         _clapTimes.clear();
       });
+      final rpcStop = _rpc;
+      if (rpcStop != null) unawaited(rpcStop.clearActivity());
+      if (_sessionClaps > 0 && _sessionStartedAt != null) {
+        _history?.add(
+          SessionRecord(
+            endedAt: DateTime.now(),
+            claps: _sessionClaps,
+            peakRate: _sessionPeakRate,
+            durationSecs: DateTime.now()
+                .difference(_sessionStartedAt!)
+                .inSeconds,
+          ),
+        );
+        _lastSession = PlapSession(
+          version: 1,
+          startedAt: _sessionStartedAt!,
+          durationMs: DateTime.now()
+              .difference(_sessionStartedAt!)
+              .inMilliseconds,
+          clapOffsetsMs: List.of(_plapOffsets),
+        );
+      }
       if (_sessionClaps > 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1202,7 +1386,7 @@ class _CounterPageState extends State<CounterPage>
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontFamily: 'Quicksand',
-                fontVariations: [_wghtSemi],
+                fontVariations: [wghtSemi],
                 color: Colors.white,
               ),
             ),
@@ -1233,11 +1417,27 @@ class _CounterPageState extends State<CounterPage>
       _sessionClaps = 0;
       _clapTimes.clear();
       _rate = 0;
+      _sessionPeakRate = 0;
+      _sessionStartedAt = DateTime.now();
+      _plapOffsets.clear();
       _bestAtSessionStart = _bestSession;
       _bestCelebrated = false;
+      _goalReached = false;
     });
+    final rpc = _rpc;
+    if (rpc != null) {
+      unawaited(() async {
+        if (!rpc.connected) await rpc.connect();
+        await rpc.setActivity(
+          details: 'plapping rn 💖',
+          state: '0 plaps this session',
+          start: _sessionStartedAt,
+        );
+      }());
+    }
     _poll = Timer.periodic(const Duration(milliseconds: 33), (_) {
       final newCount = p.count;
+      final oldCount = _count;
       final now = DateTime.now();
       if (newCount > _count) {
         _pulse.forward(from: 1.0).then((_) => _pulse.reverse());
@@ -1245,6 +1445,9 @@ class _CounterPageState extends State<CounterPage>
         final delta = newCount - _count;
         for (var i = 0; i < delta; i++) {
           _clapTimes.add(now);
+          if (_sessionStartedAt != null) {
+            _plapOffsets.add(now.difference(_sessionStartedAt!).inMilliseconds);
+          }
         }
         final oldLifetime = _lifetime;
         _lifetime += delta;
@@ -1252,6 +1455,7 @@ class _CounterPageState extends State<CounterPage>
         for (final p in palettes) {
           if (oldLifetime < p.unlockAt && _lifetime >= p.unlockAt) {
             _burst.forward(from: 0);
+            if (_sndGoal != null) PlapperSound.play(_sndGoal!);
             _showPill('theme unlocked: ${p.name} ${p.emoji} !!', 3200);
           }
         }
@@ -1260,6 +1464,7 @@ class _CounterPageState extends State<CounterPage>
       setState(() {
         _count = newCount;
         _rate = _clapTimes.length / _rateWindow.inSeconds;
+        if (_rate > _sessionPeakRate) _sessionPeakRate = _rate;
         _sessionClaps = newCount - _sessionStart;
         if (_sessionClaps > _bestSession) {
           _bestSession = _sessionClaps;
@@ -1270,6 +1475,7 @@ class _CounterPageState extends State<CounterPage>
             _sessionClaps > _bestAtSessionStart) {
           _bestCelebrated = true;
           _burst.forward(from: 0);
+          if (_sndGoal != null) PlapperSound.play(_sndGoal!);
           _showPill('new best!! ${_praiseLine()}', 3200);
         }
         _envDb = p.envelopeDb;
@@ -1277,6 +1483,37 @@ class _CounterPageState extends State<CounterPage>
         _envHist[_histHead] = _envDb;
         _histHead = (_histHead + 1) % _histLen;
       });
+      if (newCount > oldCount) {
+        final g = _goal;
+        if (g != null) {
+          final oldS = oldCount - _sessionStart;
+          if (!_goalReached && _sessionClaps >= g) {
+            _goalReached = true;
+            _burst.forward(from: 0);
+            if (_sndGoal != null) PlapperSound.play(_sndGoal!);
+            _showPill(GoalMilestones.goalReached(_petName, g), 3600);
+          } else if (!_goalReached) {
+            final cp = GoalMilestones.checkpoint(
+              oldS,
+              _sessionClaps,
+              g,
+              _petName,
+            );
+            if (cp != null) _showPill(cp, 3000);
+          }
+        }
+        final rpc = _rpc;
+        if (rpc != null && now.difference(_lastRpcPush).inMilliseconds > 1000) {
+          _lastRpcPush = now;
+          unawaited(
+            rpc.setActivity(
+              details: 'plapping rn 💖',
+              state: '$_sessionClaps plaps this session',
+              start: _sessionStartedAt,
+            ),
+          );
+        }
+      }
     });
   }
 
@@ -1358,6 +1595,21 @@ class _CounterPageState extends State<CounterPage>
                             children: [
                               _Wordmark(pal: pal),
                               Positioned(
+                                left: 0,
+                                child: IconButton(
+                                  tooltip: 'History',
+                                  onPressed: () => showHistorySheet(
+                                    context,
+                                    pal,
+                                    _history?.load() ?? [],
+                                  ),
+                                  icon: Icon(
+                                    Icons.auto_graph_rounded,
+                                    color: pal.textSoft,
+                                  ),
+                                ),
+                              ),
+                              Positioned(
                                 right: 0,
                                 child: IconButton(
                                   tooltip: 'Settings',
@@ -1372,23 +1624,43 @@ class _CounterPageState extends State<CounterPage>
                           ),
                           const Spacer(),
                           _SparkleRow(pulse: _pulse),
-                          ScaleTransition(
-                            scale: _pulse,
-                            child: ShaderMask(
-                              shaderCallback: (bounds) => LinearGradient(
-                                colors: [pal.accentDeep, pal.secondary],
-                              ).createShader(bounds),
-                              child: Text(
-                                '$_count',
-                                style: const TextStyle(
-                                  fontSize: 128,
-                                  height: 1.0,
-                                  color: Colors.white,
-                                  fontVariations: [_wghtBold],
-                                  fontFeatures: [FontFeature.tabularFigures()],
+                          Builder(
+                            builder: (context) {
+                              final counter = ScaleTransition(
+                                scale: _pulse,
+                                child: ShaderMask(
+                                  shaderCallback: (bounds) => LinearGradient(
+                                    colors: [pal.accentDeep, pal.secondary],
+                                  ).createShader(bounds),
+                                  child: Text(
+                                    '$_count',
+                                    style: TextStyle(
+                                      fontSize: _goal == null ? 128 : 96,
+                                      height: 1.0,
+                                      color: Colors.white,
+                                      fontVariations: const [wghtBold],
+                                      fontFeatures: const [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
+                              );
+                              final g = _goal;
+                              if (g == null) return counter;
+                              return SizedBox(
+                                width: 250,
+                                height: 250,
+                                child: GoalProgressRing(
+                                  progress: _listening || _sessionClaps > 0
+                                      ? (_sessionClaps / g).clamp(0.0, 1.0)
+                                      : 0,
+                                  pal: pal,
+                                  celebrating: _goalReached,
+                                  child: counter,
+                                ),
+                              );
+                            },
                           ),
                           Text(
                             _count == 1 ? 'plap' : 'plaps',
@@ -1404,7 +1676,7 @@ class _CounterPageState extends State<CounterPage>
                               fontSize: 12,
                               letterSpacing: 2,
                               color: pal.accent.withValues(alpha: 0.8),
-                              fontVariations: const [_wghtBold],
+                              fontVariations: const [wghtBold],
                             ),
                           ),
                           SizedBox(
@@ -1475,11 +1747,20 @@ class _CounterPageState extends State<CounterPage>
                                 value: _rate.toStringAsFixed(1),
                               ),
                               const SizedBox(width: 10),
-                              _StatChip(
-                                pal: pal,
-                                emoji: '🏆',
-                                label: 'best session',
-                                value: '$_bestSession',
+                              GestureDetector(
+                                onTap: () => showChallengeSheet(
+                                  context,
+                                  pal,
+                                  myName: _petName,
+                                  myBest: _bestSession,
+                                  myTitle: _title,
+                                ),
+                                child: _StatChip(
+                                  pal: pal,
+                                  emoji: '🏆',
+                                  label: 'best · tap to challenge',
+                                  value: '$_bestSession',
+                                ),
                               ),
                             ],
                           ),
@@ -1543,7 +1824,7 @@ class _CounterPageState extends State<CounterPage>
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: pal.text,
-                                          fontVariations: const [_wghtBold],
+                                          fontVariations: const [wghtBold],
                                         ),
                                       ),
                                     ],
@@ -1599,6 +1880,18 @@ class _CounterPageState extends State<CounterPage>
                                 label: 'share',
                                 onTap: _share,
                               ),
+                              if (_lastSession != null && !_listening)
+                                _GradientPill(
+                                  pal: pal,
+                                  outlined: true,
+                                  icon: Icons.play_arrow_rounded,
+                                  label: 'replay',
+                                  onTap: () => showReplaySheet(
+                                    context,
+                                    pal,
+                                    _lastSession!,
+                                  ),
+                                ),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -1845,7 +2138,7 @@ class _GradientPill extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 15,
                     color: fg,
-                    fontVariations: const [_wghtBold],
+                    fontVariations: const [wghtBold],
                   ),
                 ),
               ],
@@ -1889,7 +2182,7 @@ class _StatChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 14,
               color: pal.cardText,
-              fontVariations: const [_wghtBold],
+              fontVariations: const [wghtBold],
             ),
           ),
           const SizedBox(width: 5),
@@ -1898,7 +2191,7 @@ class _StatChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               color: pal.cardTextSoft,
-              fontVariations: const [_wghtSemi],
+              fontVariations: const [wghtSemi],
             ),
           ),
         ],
@@ -1947,7 +2240,7 @@ class _LabeledCard extends StatelessWidget {
                   fontSize: 12,
                   letterSpacing: 1.5,
                   color: pal.cardTextSoft,
-                  fontVariations: const [_wghtBold],
+                  fontVariations: const [wghtBold],
                 ),
               ),
               const Spacer(),
@@ -1957,7 +2250,7 @@ class _LabeledCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 11,
                     color: pal.cardTextSoft,
-                    fontVariations: const [_wghtSemi],
+                    fontVariations: const [wghtSemi],
                   ),
                 ),
             ],
