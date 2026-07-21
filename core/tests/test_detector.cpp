@@ -4,7 +4,7 @@
 #include <random>
 #include <vector>
 
-#include "plounter/plounter.h"
+#include "plapper/plapper.h"
 
 namespace {
 
@@ -48,24 +48,24 @@ void add_sine(std::vector<float>& buf, double atSeconds, double lenSeconds,
 }
 
 /* Feed in 512-sample blocks like a real audio callback. */
-int run(plounter_detector* d, const std::vector<float>& buf) {
+int run(plapper_detector* d, const std::vector<float>& buf) {
   int total = 0;
   for (size_t i = 0; i < buf.size(); i += 512) {
     const int32_t n = int32_t(std::min<size_t>(512, buf.size() - i));
-    total += plounter_process(d, buf.data() + i, n);
+    total += plapper_process(d, buf.data() + i, n);
   }
   return total;
 }
 
 struct Fixture {
-  plounter_config cfg = plounter_config_default(kSr);
-  plounter_detector* d = nullptr;
+  plapper_config cfg = plapper_config_default(kSr);
+  plapper_detector* d = nullptr;
   explicit Fixture(float sensitivity = 12.0f) {
     cfg.sensitivity_db = sensitivity;
-    d = plounter_create(&cfg);
+    d = plapper_create(&cfg);
     REQUIRE(d != nullptr);
   }
-  ~Fixture() { plounter_destroy(d); }
+  ~Fixture() { plapper_destroy(d); }
 };
 
 }  // namespace
@@ -75,7 +75,7 @@ TEST_CASE("single clap in quiet room counts once") {
   auto buf = silence(2.0, 3e-4f); /* ~-70 dBFS room tone */
   add_clap(buf, 1.0);
   CHECK(run(f.d, buf) == 1);
-  CHECK(plounter_total_count(f.d) == 1);
+  CHECK(plapper_total_count(f.d) == 1);
 }
 
 TEST_CASE("five claps spaced 400 ms count as five") {
@@ -173,11 +173,11 @@ TEST_CASE("counter reset and meter taps behave") {
   auto buf = silence(2.0, 3e-4f);
   add_clap(buf, 1.0);
   run(f.d, buf);
-  CHECK(plounter_total_count(f.d) == 1);
-  plounter_reset_count(f.d);
-  CHECK(plounter_total_count(f.d) == 0);
-  CHECK(plounter_envelope_db(f.d) < 0.0f);
-  CHECK(plounter_noise_floor_db(f.d) < plounter_envelope_db(f.d) + 120.0f);
-  plounter_set_sensitivity(f.d, 20.0f);
-  CHECK(plounter_get_sensitivity(f.d) == 20.0f);
+  CHECK(plapper_total_count(f.d) == 1);
+  plapper_reset_count(f.d);
+  CHECK(plapper_total_count(f.d) == 0);
+  CHECK(plapper_envelope_db(f.d) < 0.0f);
+  CHECK(plapper_noise_floor_db(f.d) < plapper_envelope_db(f.d) + 120.0f);
+  plapper_set_sensitivity(f.d, 20.0f);
+  CHECK(plapper_get_sensitivity(f.d) == 20.0f);
 }

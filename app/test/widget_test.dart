@@ -1,9 +1,9 @@
 // UI-only smoke test. The full app is not pumped here because it loads the
-// native plounter core via FFI, which is not available in the test runner.
+// native plapper core via FFI, which is not available in the test runner.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:plounter/main.dart';
+import 'package:plapper/main.dart';
 
 void main() {
   testWidgets('envelope graph renders without a native library',

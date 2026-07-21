@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "dev.plounter" "\0"
-            VALUE "FileDescription", "plounter" "\0"
+            VALUE "CompanyName", "dev.plapper" "\0"
+            VALUE "FileDescription", "plapper" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "plounter" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 dev.plounter. All rights reserved." "\0"
-            VALUE "OriginalFilename", "plounter.exe" "\0"
-            VALUE "ProductName", "plounter" "\0"
+            VALUE "InternalName", "plapper" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 dev.plapper. All rights reserved." "\0"
+            VALUE "OriginalFilename", "plapper.exe" "\0"
+            VALUE "ProductName", "plapper" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

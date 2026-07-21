@@ -7,9 +7,9 @@
 /* Relative include keeps this buildable without include-path setup —
  * the iOS/macOS pods compile core via forwarder files where xcconfig
  * header search paths proved unreliable. */
-#include "../include/plounter/plounter.h"
+#include "../include/plapper/plapper.h"
 
-namespace plounter {
+namespace plapper {
 
 inline constexpr double kPi = 3.14159265358979323846;
 
@@ -71,7 +71,7 @@ private:
  * short RMS window, so beeps with hard attacks don't count. */
 class Detector {
 public:
-  explicit Detector(const plounter_config& cfg) : cfg_(cfg) { prepare(); }
+  explicit Detector(const plapper_config& cfg) : cfg_(cfg) { prepare(); }
 
   int32_t process(const float* mono, int32_t n);
 
@@ -93,7 +93,7 @@ private:
   void prepare();
   bool riseOk() const;
 
-  plounter_config cfg_{};
+  plapper_config cfg_{};
 
   BiquadHP hp1_, hp2_;
   EnvFollower envHp_, envFull_;
@@ -135,4 +135,4 @@ private:
   std::atomic<float> floorDbShared_{-120.0f};
 };
 
-}  // namespace plounter
+}  // namespace plapper

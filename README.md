@@ -1,4 +1,4 @@
-# Plounter
+# Plapper
 
 Counts your claps. Tunable sensitivity, adaptive noise floor, cross-platform
 (Windows / macOS / Linux / Android / iOS).
@@ -7,7 +7,7 @@ Counts your claps. Tunable sensitivity, adaptive noise floor, cross-platform
 
 ```
 core/                       pure C++20 clap-detection DSP + miniaudio mic capture (CMake)
-packages/plounter_native/   FFI plugin shell: builds + bundles core on every platform
+packages/plapper_native/   FFI plugin shell: builds + bundles core on every platform
 app/                        Flutter UI, talks to core over dart:ffi
 fixtures/                   recorded test audio (see fixtures/README.md)
 ```
@@ -36,7 +36,7 @@ Core + tests:
 
 ```sh
 cmake -S core -B core/build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build core/build && ./core/build/plounter_tests
+cmake --build core/build && ./core/build/plapper_tests
 ```
 
 App (bundles the core automatically on Linux):
@@ -47,12 +47,12 @@ cd app && flutter run -d linux
 
 ## Platform wiring
 
-All five platforms build the core through the `plounter_native` FFI plugin:
+All five platforms build the core through the `plapper_native` FFI plugin:
 
 | Platform | Mechanism | Mic permission |
 |----------|-----------|----------------|
-| Linux    | plugin `linux/CMakeLists.txt` → `core/`, bundles `libplounter.so` | none needed |
-| Windows  | plugin `windows/CMakeLists.txt` → `core/`, bundles `plounter.dll` | none needed |
+| Linux    | plugin `linux/CMakeLists.txt` → `core/`, bundles `libplapper.so` | none needed |
+| Windows  | plugin `windows/CMakeLists.txt` → `core/`, bundles `plapper.dll` | none needed |
 | macOS    | pod compiles core via forwarder includes (`macos/Classes/`) | entitlement + usage string; system prompts |
 | Android  | Gradle `externalNativeBuild` → `src/CMakeLists.txt` → `core/` | `RECORD_AUDIO` + runtime request (`permission_handler`) |
 | iOS      | pod compiles core via forwarder includes (`ios/Classes/`) | usage string + runtime request (`permission_handler`) |

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdio>
 
-namespace plounter {
+namespace plapper {
 
 void Detector::prepare() {
   const double sr = cfg_.sample_rate;
@@ -115,7 +115,7 @@ int32_t Detector::process(const float* mono, int32_t n) {
                           zcr >= cfg_.zcr_min;
         if (debugLog_.load(std::memory_order_relaxed)) {
           std::fprintf(stderr,
-                       "[plounter] candidate: env=%.1fdB floor=%.1fdB "
+                       "[plapper] candidate: env=%.1fdB floor=%.1fdB "
                        "rise=%s ratio=%.2f(min %.2f) zcr=%.3f(min %.3f) -> %s\n",
                        eHpDb, floorDb, rise ? "ok" : "FAIL", bandRatio,
                        cfg_.band_ratio_min, zcr, cfg_.zcr_min,
@@ -136,7 +136,7 @@ int32_t Detector::process(const float* mono, int32_t n) {
         const bool decayed = eHpDb <= envConfirmDb_ - cfg_.decay_drop_db;
         if (debugLog_.load(std::memory_order_relaxed)) {
           std::fprintf(stderr,
-                       "[plounter] decay: env=%.1fdB confirm=%.1fdB "
+                       "[plapper] decay: env=%.1fdB confirm=%.1fdB "
                        "need<=%.1fdB -> %s\n",
                        eHpDb, envConfirmDb_,
                        envConfirmDb_ - cfg_.decay_drop_db,
@@ -161,4 +161,4 @@ int32_t Detector::process(const float* mono, int32_t n) {
   return claps;
 }
 
-}  // namespace plounter
+}  // namespace plapper

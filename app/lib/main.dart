@@ -7,9 +7,31 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'plounter_ffi.dart';
+import 'plapper_ffi.dart';
 
-void main() => runApp(const PlounterApp());
+void main() {
+  _migratePlounterPrefs();
+  runApp(const PlapperApp());
+}
+
+/// One-time migration from the pre-rebrand app id (dev.plounter.plounter):
+/// carries over lifetime claps, best session, and settings on Linux.
+void _migratePlounterPrefs() {
+  if (!Platform.isLinux) return;
+  try {
+    final dataHome = Platform.environment['XDG_DATA_HOME'] ??
+        '${Platform.environment['HOME']}/.local/share';
+    final old = File('$dataHome/dev.plounter.plounter/shared_preferences.json');
+    final fresh =
+        File('$dataHome/dev.plapper.plapper/shared_preferences.json');
+    if (old.existsSync() && !fresh.existsSync()) {
+      fresh.parent.createSync(recursive: true);
+      old.copySync(fresh.path);
+    }
+  } catch (_) {
+    // migration is best-effort; a fresh profile is an acceptable fallback
+  }
+}
 
 const _wghtSemi = FontVariation('wght', 600);
 const _wghtBold = FontVariation('wght', 700);
@@ -134,13 +156,13 @@ const palettes = [
   ),
 ];
 
-class PlounterApp extends StatelessWidget {
-  const PlounterApp({super.key});
+class PlapperApp extends StatelessWidget {
+  const PlapperApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'plounter ♡',
+      title: 'plapper ♡',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
@@ -164,7 +186,7 @@ class CounterPage extends StatefulWidget {
 
 class _CounterPageState extends State<CounterPage>
     with TickerProviderStateMixin {
-  Plounter? _plounter;
+  Plapper? _plapper;
   String? _initError;
 
   Timer? _poll;
@@ -281,9 +303,9 @@ class _CounterPageState extends State<CounterPage>
   void initState() {
     super.initState();
     try {
-      _plounter = Plounter();
-      _sensitivityDb = _plounter!.sensitivityDb;
-      _releaseMs = _plounter!.envReleaseMs;
+      _plapper = Plapper();
+      _sensitivityDb = _plapper!.sensitivityDb;
+      _releaseMs = _plapper!.envReleaseMs;
     } catch (e) {
       _initError = '$e';
     }
@@ -303,8 +325,8 @@ class _CounterPageState extends State<CounterPage>
           palettes.length - 1,
         );
       });
-      _plounter?.sensitivityDb = _sensitivityDb;
-      _plounter?.envReleaseMs = _releaseMs;
+      _plapper?.sensitivityDb = _sensitivityDb;
+      _plapper?.envReleaseMs = _releaseMs;
     });
   }
 
@@ -315,13 +337,13 @@ class _CounterPageState extends State<CounterPage>
     _milestoneCtrl.dispose();
     _pulse.dispose();
     _drift.dispose();
-    _plounter?.dispose();
+    _plapper?.dispose();
     super.dispose();
   }
 
   Future<void> _share() async {
     final text =
-        'I got $_sessionClaps claps in one plounter session!! 👏💖'
+        'I got $_sessionClaps claps in one plapper session!! 👏💖'
         '${_bestSession > 0 ? ' (best ever: $_bestSession)' : ''}'
         ' · $_unlockedCount/${palettes.length} themes unlocked ✨';
     await Clipboard.setData(ClipboardData(text: text));
@@ -505,7 +527,7 @@ class _CounterPageState extends State<CounterPage>
                       max: 40,
                       onChanged: (v) {
                         both(() => _sensitivityDb = v);
-                        _plounter?.sensitivityDb = v;
+                        _plapper?.sensitivityDb = v;
                       },
                       onChangeEnd: (v) => _prefs?.setDouble('sensitivityDb', v),
                     ),
@@ -522,7 +544,7 @@ class _CounterPageState extends State<CounterPage>
                       max: 80,
                       onChanged: (v) {
                         both(() => _releaseMs = v);
-                        _plounter?.envReleaseMs = v;
+                        _plapper?.envReleaseMs = v;
                       },
                       onChangeEnd: (v) => _prefs?.setDouble('releaseMs', v),
                     ),
@@ -633,7 +655,7 @@ class _CounterPageState extends State<CounterPage>
   }
 
   Future<void> _toggleListening() async {
-    final p = _plounter;
+    final p = _plapper;
     if (p == null) return;
 
     if (_listening) {
@@ -718,7 +740,7 @@ class _CounterPageState extends State<CounterPage>
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Text(
-              'Failed to load plounter core:\n$_initError',
+              'Failed to load plapper core:\n$_initError',
               textAlign: TextAlign.center,
             ),
           ),
@@ -934,7 +956,7 @@ class _CounterPageState extends State<CounterPage>
                                 icon: Icons.restart_alt_rounded,
                                 label: 'reset',
                                 onTap: () {
-                                  _plounter?.resetCount();
+                                  _plapper?.resetCount();
                                   setState(() {
                                     _count = 0;
                                     _sessionStart = 0;
@@ -985,7 +1007,7 @@ class _Wordmark extends StatelessWidget {
             colors: [pal.accentDeep, pal.secondary],
           ).createShader(bounds),
           child: const Text(
-            'plounter',
+            'plapper',
             style: TextStyle(
               fontFamily: 'Pacifico',
               fontSize: 30,

@@ -27,7 +27,7 @@
 	<key>NSMainNibFile</key>
 	<string>MainMenu</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Plounter listens to the microphone to count your claps.</string>
+	<string>Plapper listens to the microphone to count your claps.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

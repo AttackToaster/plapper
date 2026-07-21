@@ -1,4 +1,4 @@
-#include "../include/plounter/plounter_capture.h"
+#include "../include/plapper/plapper_capture.h"
 
 #define MINIAUDIO_IMPLEMENTATION
 #define MA_NO_ENCODING
@@ -10,22 +10,22 @@
 
 extern "C" {
 
-struct plounter_capture {
+struct plapper_capture {
   ma_device device;
-  plounter_detector* detector;
+  plapper_detector* detector;
 };
 
 static void data_callback(ma_device* device, void* /*out*/, const void* in,
                           ma_uint32 frames) {
-  auto* cap = static_cast<plounter_capture*>(device->pUserData);
-  plounter_process(cap->detector, static_cast<const float*>(in),
+  auto* cap = static_cast<plapper_capture*>(device->pUserData);
+  plapper_process(cap->detector, static_cast<const float*>(in),
                    static_cast<int32_t>(frames));
 }
 
-plounter_capture* plounter_capture_start(plounter_detector* d,
+plapper_capture* plapper_capture_start(plapper_detector* d,
                                          double sample_rate) {
   if (!d) return nullptr;
-  auto* cap = new (std::nothrow) plounter_capture();
+  auto* cap = new (std::nothrow) plapper_capture();
   if (!cap) return nullptr;
   cap->detector = d;
 
@@ -45,13 +45,13 @@ plounter_capture* plounter_capture_start(plounter_detector* d,
     delete cap;
     return nullptr;
   }
-  fprintf(stderr, "[plounter] capture: backend=%s device=\"%s\" rate=%u\n",
+  fprintf(stderr, "[plapper] capture: backend=%s device=\"%s\" rate=%u\n",
           ma_get_backend_name(cap->device.pContext->backend),
           cap->device.capture.name, cap->device.sampleRate);
   return cap;
 }
 
-void plounter_capture_stop(plounter_capture* c) {
+void plapper_capture_stop(plapper_capture* c) {
   if (!c) return;
   ma_device_uninit(&c->device);
   delete c;
