@@ -1804,32 +1804,35 @@ class _GradientPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fg = outlined ? pal.accentDeep : Colors.white;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        canRequestFocus: false,
+    // Decoration lives on a Container, NOT an Ink: BoxShadow inside Ink
+    // flattens into a rectangular artifact on the Material layer.
+    return Container(
+      decoration: BoxDecoration(
+        gradient: outlined
+            ? null
+            : LinearGradient(colors: [pal.accentDeep, pal.secondary]),
+        color: outlined ? pal.card : null,
+        border: outlined
+            ? Border.all(color: pal.accent.withValues(alpha: 0.6))
+            : null,
         borderRadius: BorderRadius.circular(40),
-        child: Ink(
-          decoration: BoxDecoration(
-            gradient: outlined
-                ? null
-                : LinearGradient(colors: [pal.accentDeep, pal.secondary]),
-            color: outlined ? pal.card : null,
-            border: outlined
-                ? Border.all(color: pal.accent.withValues(alpha: 0.6))
-                : null,
-            borderRadius: BorderRadius.circular(40),
-            boxShadow: outlined
-                ? null
-                : [
-                    BoxShadow(
-                      color: pal.accent.withValues(alpha: 0.45),
-                      blurRadius: 16,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
-          ),
+        boxShadow: outlined
+            ? null
+            : [
+                BoxShadow(
+                  color: pal.accentDeep.withValues(alpha: 0.3),
+                  blurRadius: 18,
+                  spreadRadius: -4,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          canRequestFocus: false,
+          borderRadius: BorderRadius.circular(40),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Row(
