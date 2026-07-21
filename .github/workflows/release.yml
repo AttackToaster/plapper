@@ -36,7 +36,7 @@ jobs:
         working-directory: app
       - run: Compress-Archive -Path app/build/windows/x64/runner/Release/* -DestinationPath plapper-windows-x64.zip
       - name: Build NSIS installer
-        run: makensis /DBUNDLE=app\build\windows\x64\runner\Release installer\windows.nsi
+        run: '& "C:\Program Files (x86)\NSIS\makensis.exe" /DBUNDLE=app\build\windows\x64\runner\Release installer\windows.nsi'
       - uses: softprops/action-gh-release@v2
         with:
           files: |
