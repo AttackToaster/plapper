@@ -1101,25 +1101,25 @@ class _Wordmark extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text('✧ ', style: TextStyle(fontSize: 18, color: pal.accent)),
-        ShaderMask(
-          shaderCallback: (bounds) => LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [pal.accent, pal.accentDeep],
-          ).createShader(bounds),
-          child: Text(
-            'plapper',
-            style: TextStyle(
-              fontFamily: 'Pacifico',
-              fontSize: 32,
-              color: Colors.white,
-              shadows: [
-                Shadow(
-                  color: pal.accent.withValues(alpha: 0.55),
-                  blurRadius: 18,
-                ),
-              ],
-            ),
+        Text(
+          'plapper',
+          style: TextStyle(
+            fontFamily: 'Pacifico',
+            fontSize: 32,
+            // Per-glyph shader: unlike ShaderMask, this covers Pacifico's
+            // descenders, which paint outside the text layout box.
+            foreground: Paint()
+              ..shader = LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [pal.accent, pal.accentDeep],
+              ).createShader(const Rect.fromLTWH(0, -10, 160, 75)),
+            shadows: [
+              Shadow(
+                color: pal.accent.withValues(alpha: 0.55),
+                blurRadius: 18,
+              ),
+            ],
           ),
         ),
         Text(' ♡', style: TextStyle(fontSize: 20, color: pal.accent)),
