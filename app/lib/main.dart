@@ -28,6 +28,7 @@ class Palette {
     this.card = const Color(0xBFFFFFFF),
     Color? cardText,
     this.floaties = const ['♡', '✧', '💗', '✦', '🎀', '♡', '✧', '♡'],
+    this.unlockAt = 0,
     // ignore: prefer_initializing_formals — private field, named public param
   }) : _cardText = cardText;
 
@@ -37,6 +38,9 @@ class Palette {
   final Color card;
   final Color? _cardText;
   final List<String> floaties;
+
+  /// Lifetime claps needed to unlock this theme.
+  final int unlockAt;
 
   Color get cardText => _cardText ?? text;
   Color get textSoft => text.withValues(alpha: 0.6);
@@ -63,6 +67,7 @@ const palettes = [
     accentDeep: Color(0xFFE85D93),
     secondary: Color(0xFF55CDFC),
     text: Color(0xFF4B3A5E),
+    unlockAt: 25,
   ),
   Palette(
     name: 'lavender dream',
@@ -73,6 +78,7 @@ const palettes = [
     accentDeep: Color(0xFF8A3FFC),
     secondary: Color(0xFFFF9BDD),
     text: Color(0xFF43305C),
+    unlockAt: 75,
   ),
   Palette(
     name: 'emo kitty',
@@ -86,6 +92,45 @@ const palettes = [
     card: Color(0xE6201018),
     cardText: Color(0xFFFFC9DE),
     floaties: ['🖤', '✧', '💀', '✦', '🎀', '♡', '⛓️', '🖤'],
+    unlockAt: 150,
+  ),
+  Palette(
+    name: 'scene queen',
+    emoji: '💚',
+    bgTop: Color(0xFF17101E),
+    bgBottom: Color(0xFF261337),
+    accent: Color(0xFFFF3FA4),
+    accentDeep: Color(0xFFFF1493),
+    secondary: Color(0xFF76FF03), // neon lime
+    text: Color(0xFFEBD6FF),
+    card: Color(0xE61E1428),
+    cardText: Color(0xFFE8D9F5),
+    floaties: ['💚', '✧', '🦝', '✦', '💕', '♡', '⭐', '💚'],
+    unlockAt: 300,
+  ),
+  Palette(
+    name: 'y2k cyber',
+    emoji: '🦋',
+    bgTop: Color(0xFFE8F4FF),
+    bgBottom: Color(0xFFE2DcFF),
+    accent: Color(0xFF00A8E8),
+    accentDeep: Color(0xFF0077D6),
+    secondary: Color(0xFFFF6EC7), // holo pink
+    text: Color(0xFF2E3A5C),
+    floaties: ['🦋', '✧', '💿', '✦', '🫧', '♡', '⭐', '🦋'],
+    unlockAt: 500,
+  ),
+  Palette(
+    name: 'cottage-core',
+    emoji: '🍄',
+    bgTop: Color(0xFFF9F6E9),
+    bgBottom: Color(0xFFDDEBD2),
+    accent: Color(0xFFE86A8A), // strawberry
+    accentDeep: Color(0xFFD04A6E),
+    secondary: Color(0xFF7FAE7C), // sage
+    text: Color(0xFF4E4034),
+    floaties: ['🍓', '✧', '🍄', '✦', '🌼', '♡', '🐝', '🍓'],
+    unlockAt: 1000,
   ),
 ];
 
@@ -145,14 +190,80 @@ class _CounterPageState extends State<CounterPage>
 
   // Milestone message: shown every N claps. "{count}" expands to the count.
   int _milestoneN = 10;
-  final TextEditingController _milestoneCtrl =
-      TextEditingController(text: 'yay!! {count} claps 🎀');
+  final TextEditingController _milestoneCtrl = TextEditingController(
+    text: 'yay!! {count} claps 🎀',
+  );
   String? _milestoneShown;
   Timer? _milestoneHide;
   SharedPreferences? _prefs;
 
   int _paletteIdx = 0;
   Palette get pal => palettes[_paletteIdx];
+
+  /// Lifetime claps across all sessions — never resets; gates theme unlocks.
+  int _lifetime = 0;
+
+  // Konami code (desktop only): unlocks every theme for this session.
+  // Cheat honestly — the share line still counts real unlocks.
+  static final _konamiSeq = [
+    LogicalKeyboardKey.arrowUp,
+    LogicalKeyboardKey.arrowUp,
+    LogicalKeyboardKey.arrowDown,
+    LogicalKeyboardKey.arrowDown,
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+    LogicalKeyboardKey.keyB,
+    LogicalKeyboardKey.keyA,
+  ];
+  int _konamiPos = 0;
+  bool _konamiUnlocked = false;
+
+  bool get _isDesktop =>
+      Platform.isLinux || Platform.isWindows || Platform.isMacOS;
+
+  KeyEventResult _onKonamiKey(FocusNode node, KeyEvent e) {
+    if (e is! KeyDownEvent) return KeyEventResult.ignored;
+    final k = e.logicalKey;
+    if (k == _konamiSeq[_konamiPos]) {
+      _konamiPos++;
+      if (_konamiPos == _konamiSeq.length) {
+        _konamiPos = 0;
+        if (!_konamiUnlocked) {
+          setState(() => _konamiUnlocked = true);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: pal.accentDeep,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              content: const Text(
+                '⬆⬆⬇⬇⬅➡⬅➡BA — all themes unlocked for this session 😏✨',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontFamily: 'Quicksand',
+                  fontVariations: [_wghtSemi],
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          );
+        }
+      }
+    } else {
+      _konamiPos = k == _konamiSeq.first ? 1 : 0;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  /// Current selection stays usable even if it predates the gating.
+  bool _isUnlocked(int i) =>
+      _konamiUnlocked || _lifetime >= palettes[i].unlockAt || i == _paletteIdx;
+
+  int get _unlockedCount =>
+      palettes.where((p) => _lifetime >= p.unlockAt).length;
 
   late final AnimationController _pulse = AnimationController(
     vsync: this,
@@ -186,8 +297,11 @@ class _CounterPageState extends State<CounterPage>
         _sensitivityDb = prefs.getDouble('sensitivityDb') ?? _sensitivityDb;
         _releaseMs = prefs.getDouble('releaseMs') ?? _releaseMs;
         _bestSession = prefs.getInt('bestSession') ?? 0;
-        _paletteIdx =
-            (prefs.getInt('paletteIdx') ?? 0).clamp(0, palettes.length - 1);
+        _lifetime = prefs.getInt('lifetimeClaps') ?? 0;
+        _paletteIdx = (prefs.getInt('paletteIdx') ?? 0).clamp(
+          0,
+          palettes.length - 1,
+        );
       });
       _plounter?.sensitivityDb = _sensitivityDb;
       _plounter?.envReleaseMs = _releaseMs;
@@ -206,17 +320,17 @@ class _CounterPageState extends State<CounterPage>
   }
 
   Future<void> _share() async {
-    final text = 'I got $_sessionClaps claps in one plounter session!! 👏💖'
-        '${_bestSession > 0 ? ' (best ever: $_bestSession)' : ''}';
+    final text =
+        'I got $_sessionClaps claps in one plounter session!! 👏💖'
+        '${_bestSession > 0 ? ' (best ever: $_bestSession)' : ''}'
+        ' · $_unlockedCount/${palettes.length} themes unlocked ✨';
     await Clipboard.setData(ClipboardData(text: text));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
         backgroundColor: pal.accentDeep,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: const Text(
           'copied to clipboard — paste it anywhere 💖',
           textAlign: TextAlign.center,
@@ -249,8 +363,9 @@ class _CounterPageState extends State<CounterPage>
                 end: Alignment.bottomCenter,
                 colors: [pal.bgTop, pal.bgBottom],
               ),
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
             ),
             padding: EdgeInsets.only(
               left: 24,
@@ -271,61 +386,108 @@ class _CounterPageState extends State<CounterPage>
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Text('settings',
-                      style: TextStyle(
-                        fontFamily: 'Pacifico',
-                        fontSize: 22,
-                        color: pal.text,
-                      )),
+                  Text(
+                    'settings',
+                    style: TextStyle(
+                      fontFamily: 'Pacifico',
+                      fontSize: 22,
+                      color: pal.text,
+                    ),
+                  ),
+                  Text(
+                    '$_lifetime lifetime claps',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: pal.textSoft,
+                      fontVariations: const [_wghtSemi],
+                    ),
+                  ),
                   const SizedBox(height: 14),
                   _LabeledCard(
                     pal: pal,
                     label: 'theme ♡',
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 18,
+                      runSpacing: 12,
                       children: [
                         for (var i = 0; i < palettes.length; i++)
                           GestureDetector(
                             onTap: () {
-                              both(() => _paletteIdx = i);
-                              _prefs?.setInt('paletteIdx', i);
-                            },
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                      colors: [
-                                        palettes[i].accent,
-                                        palettes[i].secondary,
-                                      ],
+                              if (_isUnlocked(i)) {
+                                both(() => _paletteIdx = i);
+                                _prefs?.setInt('paletteIdx', i);
+                              } else {
+                                final need = palettes[i].unlockAt - _lifetime;
+                                Navigator.of(context).pop();
+                                ScaffoldMessenger.of(this.context).showSnackBar(
+                                  SnackBar(
+                                    behavior: SnackBarBehavior.floating,
+                                    backgroundColor: pal.accentDeep,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
-                                    border: Border.all(
-                                      color: i == _paletteIdx
-                                          ? palettes[i].accentDeep
-                                          : Colors.transparent,
-                                      width: 3,
+                                    content: Text(
+                                      'clap $need more to unlock '
+                                      '${palettes[i].name} ${palettes[i].emoji} 🔒✨',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontFamily: 'Quicksand',
+                                        fontVariations: [_wghtSemi],
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
-                                  child: Center(
-                                      child: Text(palettes[i].emoji,
-                                          style: const TextStyle(
-                                              fontSize: 16))),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(palettes[i].name,
+                                );
+                              }
+                            },
+                            child: Opacity(
+                              opacity: _isUnlocked(i) ? 1.0 : 0.45,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          palettes[i].accent,
+                                          palettes[i].secondary,
+                                        ],
+                                      ),
+                                      border: Border.all(
+                                        color: i == _paletteIdx
+                                            ? palettes[i].accentDeep
+                                            : Colors.transparent,
+                                        width: 3,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        _isUnlocked(i)
+                                            ? palettes[i].emoji
+                                            : '🔒',
+                                        style: const TextStyle(fontSize: 16),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    _isUnlocked(i)
+                                        ? palettes[i].name
+                                        : '${palettes[i].name} · ${palettes[i].unlockAt}',
                                     style: TextStyle(
                                       fontSize: 11,
                                       color: pal.textSoft,
                                       fontVariations: const [_wghtSemi],
-                                    )),
-                              ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                       ],
@@ -345,8 +507,7 @@ class _CounterPageState extends State<CounterPage>
                         both(() => _sensitivityDb = v);
                         _plounter?.sensitivityDb = v;
                       },
-                      onChangeEnd: (v) =>
-                          _prefs?.setDouble('sensitivityDb', v),
+                      onChangeEnd: (v) => _prefs?.setDouble('sensitivityDb', v),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -386,21 +547,26 @@ class _CounterPageState extends State<CounterPage>
                             isDense: true,
                             hintText: 'your message — {count} = clap count',
                             hintStyle: TextStyle(
-                                color: pal.cardText.withValues(alpha: 0.35)),
+                              color: pal.cardText.withValues(alpha: 0.35),
+                            ),
                             filled: true,
                             fillColor: pal.accent.withValues(alpha: 0.06),
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 10),
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide(
-                                  color:
-                                      pal.accent.withValues(alpha: 0.3)),
+                                color: pal.accent.withValues(alpha: 0.3),
+                              ),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(14),
                               borderSide: BorderSide(
-                                  color: pal.accent, width: 1.5),
+                                color: pal.accent,
+                                width: 1.5,
+                              ),
                             ),
                           ),
                           onChanged: (v) =>
@@ -411,8 +577,7 @@ class _CounterPageState extends State<CounterPage>
                           min: 2,
                           max: 100,
                           divisions: 98,
-                          onChanged: (v) =>
-                              both(() => _milestoneN = v.round()),
+                          onChanged: (v) => both(() => _milestoneN = v.round()),
                           onChangeEnd: (v) =>
                               _prefs?.setInt('milestoneN', v.round()),
                         ),
@@ -460,8 +625,7 @@ class _CounterPageState extends State<CounterPage>
     final reached = (newCount ~/ _milestoneN) * _milestoneN;
     _milestoneHide?.cancel();
     setState(() {
-      _milestoneShown =
-          _milestoneCtrl.text.replaceAll('{count}', '$reached');
+      _milestoneShown = _milestoneCtrl.text.replaceAll('{count}', '$reached');
     });
     _milestoneHide = Timer(const Duration(milliseconds: 2600), () {
       if (mounted) setState(() => _milestoneShown = null);
@@ -512,8 +676,21 @@ class _CounterPageState extends State<CounterPage>
       if (newCount > _count) {
         _pulse.forward(from: 1.0).then((_) => _pulse.reverse());
         _maybeShowMilestone(_count, newCount);
-        for (var i = 0; i < newCount - _count; i++) {
+        final delta = newCount - _count;
+        for (var i = 0; i < delta; i++) {
           _clapTimes.add(now);
+        }
+        final oldLifetime = _lifetime;
+        _lifetime += delta;
+        _prefs?.setInt('lifetimeClaps', _lifetime);
+        for (final p in palettes) {
+          if (oldLifetime < p.unlockAt && _lifetime >= p.unlockAt) {
+            _milestoneHide?.cancel();
+            _milestoneShown = 'theme unlocked: ${p.name} ${p.emoji} !!';
+            _milestoneHide = Timer(const Duration(milliseconds: 3200), () {
+              if (mounted) setState(() => _milestoneShown = null);
+            });
+          }
         }
       }
       _clapTimes.removeWhere((t) => now.difference(t) > _rateWindow);
@@ -540,8 +717,10 @@ class _CounterPageState extends State<CounterPage>
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
-            child: Text('Failed to load plounter core:\n$_initError',
-                textAlign: TextAlign.center),
+            child: Text(
+              'Failed to load plounter core:\n$_initError',
+              textAlign: TextAlign.center,
+            ),
           ),
         ),
       );
@@ -550,220 +729,240 @@ class _CounterPageState extends State<CounterPage>
     final thresholdDb = _floorDb + _sensitivityDb;
 
     return Scaffold(
-      body: AnimatedContainer(
-        duration: const Duration(milliseconds: 500),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [pal.bgTop, pal.bgBottom],
+      body: Focus(
+        autofocus: true,
+        onKeyEvent: _isDesktop ? _onKonamiKey : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 500),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [pal.bgTop, pal.bgBottom],
+            ),
           ),
-        ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: AnimatedBuilder(
-                  animation: _drift,
-                  builder: (context, _) => CustomPaint(
-                    painter: _FloatiesPainter(
-                      t: _drift.value,
-                      pal: pal,
-                      lively: _listening,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: _drift,
+                    builder: (context, _) => CustomPaint(
+                      painter: _FloatiesPainter(
+                        t: _drift.value,
+                        pal: pal,
+                        lively: _listening,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            SafeArea(
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 560),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 32, vertical: 24),
-                    child: Column(
-                      children: [
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            _Wordmark(pal: pal),
-                            Positioned(
-                              right: 0,
-                              child: IconButton(
-                                tooltip: 'Settings',
-                                onPressed: _openSettings,
-                                icon: Icon(Icons.tune_rounded,
-                                    color: pal.textSoft),
+              SafeArea(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 560),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 32,
+                        vertical: 24,
+                      ),
+                      child: Column(
+                        children: [
+                          Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              _Wordmark(pal: pal),
+                              Positioned(
+                                right: 0,
+                                child: IconButton(
+                                  tooltip: 'Settings',
+                                  onPressed: _openSettings,
+                                  icon: Icon(
+                                    Icons.tune_rounded,
+                                    color: pal.textSoft,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        _SparkleRow(pulse: _pulse),
-                        ScaleTransition(
-                          scale: _pulse,
-                          child: ShaderMask(
-                            shaderCallback: (bounds) => LinearGradient(
-                              colors: [pal.accentDeep, pal.secondary],
-                            ).createShader(bounds),
-                            child: Text(
-                              '$_count',
-                              style: const TextStyle(
-                                fontSize: 128,
-                                height: 1.0,
-                                color: Colors.white,
-                                fontVariations: [_wghtBold],
-                                fontFeatures: [FontFeature.tabularFigures()],
+                            ],
+                          ),
+                          const Spacer(),
+                          _SparkleRow(pulse: _pulse),
+                          ScaleTransition(
+                            scale: _pulse,
+                            child: ShaderMask(
+                              shaderCallback: (bounds) => LinearGradient(
+                                colors: [pal.accentDeep, pal.secondary],
+                              ).createShader(bounds),
+                              child: Text(
+                                '$_count',
+                                style: const TextStyle(
+                                  fontSize: 128,
+                                  height: 1.0,
+                                  color: Colors.white,
+                                  fontVariations: [_wghtBold],
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        Text(_count == 1 ? 'clap' : 'claps',
+                          Text(
+                            _count == 1 ? 'clap' : 'claps',
                             style: TextStyle(
                               fontFamily: 'Pacifico',
                               fontSize: 22,
                               color: pal.textSoft,
-                            )),
-                        SizedBox(
-                          height: 46,
-                          child: Center(
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 300),
-                              transitionBuilder: (child, anim) =>
-                                  FadeTransition(
-                                opacity: anim,
-                                child: ScaleTransition(
-                                    scale: anim, child: child),
-                              ),
-                              child: _milestoneShown == null
-                                  ? const SizedBox.shrink()
-                                  : Container(
-                                      key: ValueKey(_milestoneShown),
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 22, vertical: 7),
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(colors: [
-                                          pal.accent,
-                                          pal.secondary
-                                        ]),
-                                        borderRadius:
-                                            BorderRadius.circular(30),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: pal.accent
-                                                .withValues(alpha: 0.35),
-                                            blurRadius: 14,
-                                            offset: const Offset(0, 4),
-                                          ),
-                                        ],
-                                      ),
-                                      child: Text(
-                                        _milestoneShown!,
-                                        style: const TextStyle(
-                                          fontFamily: 'Pacifico',
-                                          color: Colors.white,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ),
                             ),
                           ),
-                        ),
-                        const Spacer(),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _StatChip(
+                          SizedBox(
+                            height: 46,
+                            child: Center(
+                              child: AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 300),
+                                transitionBuilder: (child, anim) =>
+                                    FadeTransition(
+                                      opacity: anim,
+                                      child: ScaleTransition(
+                                        scale: anim,
+                                        child: child,
+                                      ),
+                                    ),
+                                child: _milestoneShown == null
+                                    ? const SizedBox.shrink()
+                                    : Container(
+                                        key: ValueKey(_milestoneShown),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 22,
+                                          vertical: 7,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [pal.accent, pal.secondary],
+                                          ),
+                                          borderRadius: BorderRadius.circular(
+                                            30,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: pal.accent.withValues(
+                                                alpha: 0.35,
+                                              ),
+                                              blurRadius: 14,
+                                              offset: const Offset(0, 4),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Text(
+                                          _milestoneShown!,
+                                          style: const TextStyle(
+                                            fontFamily: 'Pacifico',
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _StatChip(
                                 pal: pal,
                                 emoji: '👏',
                                 label: 'this session',
-                                value: '$_sessionClaps'),
-                            const SizedBox(width: 10),
-                            _StatChip(
+                                value: '$_sessionClaps',
+                              ),
+                              const SizedBox(width: 10),
+                              _StatChip(
                                 pal: pal,
                                 emoji: '⚡',
                                 label: 'claps / sec',
-                                value: _rate.toStringAsFixed(1)),
-                            const SizedBox(width: 10),
-                            _StatChip(
+                                value: _rate.toStringAsFixed(1),
+                              ),
+                              const SizedBox(width: 10),
+                              _StatChip(
                                 pal: pal,
                                 emoji: '🏆',
                                 label: 'best session',
-                                value: '$_bestSession'),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        _LabeledCard(
-                          pal: pal,
-                          label: 'envelope — last 4 s',
-                          trailing: _listening
-                              ? '${_envDb.toStringAsFixed(0)} dB'
-                              : 'mic off',
-                          child: EnvelopeGraph(
-                            history: _envHist,
-                            head: _histHead,
-                            floorDb: _listening ? _floorDb : -120,
-                            thresholdDb: _listening ? thresholdDb : -120,
-                            palette: pal,
+                                value: '$_bestSession',
+                              ),
+                            ],
                           ),
-                        ),
-                        if (_micError != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Text(_micError!,
-                                style: TextStyle(color: pal.accentDeep)),
+                          const SizedBox(height: 14),
+                          _LabeledCard(
+                            pal: pal,
+                            label: 'envelope — last 4 s',
+                            trailing: _listening
+                                ? '${_envDb.toStringAsFixed(0)} dB'
+                                : 'mic off',
+                            child: EnvelopeGraph(
+                              history: _envHist,
+                              head: _histHead,
+                              floorDb: _listening ? _floorDb : -120,
+                              thresholdDb: _listening ? thresholdDb : -120,
+                              palette: pal,
+                            ),
                           ),
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _GradientPill(
-                              pal: pal,
-                              outlined: _listening,
-                              icon: _listening
-                                  ? Icons.mic_off_rounded
-                                  : Icons.favorite_rounded,
-                              label: _listening
-                                  ? 'stop listening'
-                                  : 'start listening',
-                              onTap: _toggleListening,
+                          if (_micError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Text(
+                                _micError!,
+                                style: TextStyle(color: pal.accentDeep),
+                              ),
                             ),
-                            const SizedBox(width: 14),
-                            _GradientPill(
-                              pal: pal,
-                              outlined: true,
-                              icon: Icons.restart_alt_rounded,
-                              label: 'reset',
-                              onTap: () {
-                                _plounter?.resetCount();
-                                setState(() {
-                                  _count = 0;
-                                  _sessionStart = 0;
-                                  _sessionClaps = 0;
-                                  _clapTimes.clear();
-                                  _rate = 0;
-                                });
-                              },
-                            ),
-                            const SizedBox(width: 14),
-                            _GradientPill(
-                              pal: pal,
-                              outlined: true,
-                              icon: Icons.ios_share_rounded,
-                              label: 'share',
-                              onTap: _share,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                      ],
+                          const SizedBox(height: 24),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _GradientPill(
+                                pal: pal,
+                                outlined: _listening,
+                                icon: _listening
+                                    ? Icons.mic_off_rounded
+                                    : Icons.favorite_rounded,
+                                label: _listening
+                                    ? 'stop listening'
+                                    : 'start listening',
+                                onTap: _toggleListening,
+                              ),
+                              const SizedBox(width: 14),
+                              _GradientPill(
+                                pal: pal,
+                                outlined: true,
+                                icon: Icons.restart_alt_rounded,
+                                label: 'reset',
+                                onTap: () {
+                                  _plounter?.resetCount();
+                                  setState(() {
+                                    _count = 0;
+                                    _sessionStart = 0;
+                                    _sessionClaps = 0;
+                                    _clapTimes.clear();
+                                    _rate = 0;
+                                  });
+                                },
+                              ),
+                              const SizedBox(width: 14),
+                              _GradientPill(
+                                pal: pal,
+                                outlined: true,
+                                icon: Icons.ios_share_rounded,
+                                label: 'share',
+                                onTap: _share,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -832,7 +1031,8 @@ class _FloatiesPainter extends CustomPainter {
   final Palette pal;
   final bool lively;
 
-  static const _emojiGlyphs = {'💗', '🎀', '🖤', '💀', '⛓️'};
+  /// Glyphs drawn in palette colors; everything else is a full-color emoji.
+  static const _tintedGlyphs = {'♡', '✧', '✦'};
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -848,7 +1048,8 @@ class _FloatiesPainter extends CustomPainter {
 
       final progress = (t * speed + phase) % 1.0;
       final y = size.height * (1.05 - progress * 1.1);
-      final x = baseX * size.width +
+      final x =
+          baseX * size.width +
           math.sin((t * speed + phase) * 2 * math.pi * 2) * wobble;
 
       // fade at both ends of the journey
@@ -856,7 +1057,7 @@ class _FloatiesPainter extends CustomPainter {
       final alpha = edge * (lively ? 0.5 : 0.22);
       if (alpha <= 0.01) continue;
 
-      final isEmoji = _emojiGlyphs.contains(glyph);
+      final isEmoji = !_tintedGlyphs.contains(glyph);
       final tp = TextPainter(
         text: TextSpan(
           text: glyph,
@@ -864,8 +1065,9 @@ class _FloatiesPainter extends CustomPainter {
             fontSize: fontSize,
             color: isEmoji
                 ? Colors.white.withValues(alpha: alpha)
-                : (i.isEven ? pal.accent : pal.secondary)
-                    .withValues(alpha: alpha),
+                : (i.isEven ? pal.accent : pal.secondary).withValues(
+                    alpha: alpha,
+                  ),
           ),
         ),
         textDirection: TextDirection.ltr,
@@ -922,19 +1124,20 @@ class _GradientPill extends StatelessWidget {
                   ],
           ),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(icon, size: 19, color: fg),
                 const SizedBox(width: 8),
-                Text(label,
-                    style: TextStyle(
-                      fontSize: 15,
-                      color: fg,
-                      fontVariations: const [_wghtBold],
-                    )),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: fg,
+                    fontVariations: const [_wghtBold],
+                  ),
+                ),
               ],
             ),
           ),
@@ -971,19 +1174,23 @@ class _StatChip extends StatelessWidget {
         children: [
           Text(emoji, style: const TextStyle(fontSize: 14)),
           const SizedBox(width: 6),
-          Text(value,
-              style: TextStyle(
-                fontSize: 14,
-                color: pal.cardText,
-                fontVariations: const [_wghtBold],
-              )),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              color: pal.cardText,
+              fontVariations: const [_wghtBold],
+            ),
+          ),
           const SizedBox(width: 5),
-          Text(label,
-              style: TextStyle(
-                fontSize: 11,
-                color: pal.cardTextSoft,
-                fontVariations: const [_wghtSemi],
-              )),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: pal.cardTextSoft,
+              fontVariations: const [_wghtSemi],
+            ),
+          ),
         ],
       ),
     );
@@ -1024,21 +1231,25 @@ class _LabeledCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Text(label,
-                  style: TextStyle(
-                    fontSize: 12,
-                    letterSpacing: 1.5,
-                    color: pal.cardTextSoft,
-                    fontVariations: const [_wghtBold],
-                  )),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  letterSpacing: 1.5,
+                  color: pal.cardTextSoft,
+                  fontVariations: const [_wghtBold],
+                ),
+              ),
               const Spacer(),
               if (trailing != null)
-                Text(trailing!,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: pal.cardTextSoft,
-                      fontVariations: const [_wghtSemi],
-                    )),
+                Text(
+                  trailing!,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: pal.cardTextSoft,
+                    fontVariations: const [_wghtSemi],
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -1075,8 +1286,13 @@ class EnvelopeGraph extends StatelessWidget {
       height: 96,
       child: CustomPaint(
         size: Size.infinite,
-        painter: _GraphPainter(List.of(history), head, floorDb, thresholdDb,
-            palette ?? palettes.first),
+        painter: _GraphPainter(
+          List.of(history),
+          head,
+          floorDb,
+          thresholdDb,
+          palette ?? palettes.first,
+        ),
       ),
     );
   }
@@ -1099,14 +1315,17 @@ class _GraphPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final bg = Paint()..color = pal.accent.withValues(alpha: 0.05);
     canvas.drawRRect(
-        RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(12)),
-        bg);
+      RRect.fromRectAndRadius(Offset.zero & size, const Radius.circular(12)),
+      bg,
+    );
 
     void hline(double db, Color color) {
       if (db < _bottom || db > _top) return;
       final y = _y(db, size);
       canvas.drawRect(
-          Rect.fromLTWH(0, y - 0.75, size.width, 1.5), Paint()..color = color);
+        Rect.fromLTWH(0, y - 0.75, size.width, 1.5),
+        Paint()..color = color,
+      );
     }
 
     hline(floorDb, pal.secondary.withValues(alpha: 0.7));
@@ -1131,13 +1350,16 @@ class _GraphPainter extends CustomPainter {
       ..close();
 
     canvas.drawPath(
-        fillPath, Paint()..color = pal.accent.withValues(alpha: 0.14));
+      fillPath,
+      Paint()..color = pal.accent.withValues(alpha: 0.14),
+    );
     canvas.drawPath(
-        path,
-        Paint()
-          ..color = pal.accent
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.8);
+      path,
+      Paint()
+        ..color = pal.accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8,
+    );
   }
 
   @override
