@@ -22,7 +22,6 @@ forwarder files that relatively include ../../../../core sources.
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
     'CLANG_CXX_LANGUAGE_STANDARD' => 'c++20',
-    'HEADER_SEARCH_PATHS' => '"$(PODS_TARGET_SRCROOT)/../../../core/include"',
   }
   s.swift_version = '5.0'
 end

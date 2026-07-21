@@ -4,7 +4,10 @@
 #include <cmath>
 #include <cstdint>
 
-#include "plounter/plounter.h"
+/* Relative include keeps this buildable without include-path setup —
+ * the iOS/macOS pods compile core via forwarder files where xcconfig
+ * header search paths proved unreliable. */
+#include "../include/plounter/plounter.h"
 
 namespace plounter {
 

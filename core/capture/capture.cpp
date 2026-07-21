@@ -1,4 +1,4 @@
-#include "plounter/plounter_capture.h"
+#include "../include/plounter/plounter_capture.h"
 
 #define MINIAUDIO_IMPLEMENTATION
 #define MA_NO_ENCODING
