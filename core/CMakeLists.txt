@@ -25,6 +25,11 @@ endif()
 # output stays libplounter.* regardless of the CMake target name
 set_target_properties(plounter_core PROPERTIES OUTPUT_NAME plounter)
 
+if(ANDROID)
+  # Android 15 16k page size support
+  target_link_options(plounter_core PRIVATE "-Wl,-z,max-page-size=16384")
+endif()
+
 target_include_directories(plounter_core
   PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/capture)

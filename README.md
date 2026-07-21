@@ -6,9 +6,10 @@ Counts your claps. Tunable sensitivity, adaptive noise floor, cross-platform
 ## Layout
 
 ```
-core/       pure C++20 clap-detection DSP + miniaudio mic capture (CMake)
-app/        Flutter UI, talks to core over dart:ffi
-fixtures/   recorded test audio (see fixtures/README.md)
+core/                       pure C++20 clap-detection DSP + miniaudio mic capture (CMake)
+packages/plounter_native/   FFI plugin shell: builds + bundles core on every platform
+app/                        Flutter UI, talks to core over dart:ffi
+fixtures/                   recorded test audio (see fixtures/README.md)
 ```
 
 ## How detection works
@@ -44,15 +45,18 @@ App (bundles the core automatically on Linux):
 cd app && flutter run -d linux
 ```
 
-## Platform wiring status
+## Platform wiring
 
-| Platform | Core build wired | Notes |
-|----------|-----------------|-------|
-| Linux    | yes             | `app/linux/CMakeLists.txt` adds `core/` and bundles `libplounter.so` |
-| Windows  | not yet         | mirror the Linux approach in `app/windows/CMakeLists.txt` |
-| macOS    | not yet         | add core as an Xcode dependency or prebuilt dylib |
-| Android  | not yet         | Gradle `externalNativeBuild` + mic permission in the manifest |
-| iOS      | not yet         | static lib + `DynamicLibrary.process()` (already handled in Dart) |
+All five platforms build the core through the `plounter_native` FFI plugin:
 
-Mobile also needs runtime mic-permission requests (e.g. `permission_handler`)
-before `startListening()`.
+| Platform | Mechanism | Mic permission |
+|----------|-----------|----------------|
+| Linux    | plugin `linux/CMakeLists.txt` → `core/`, bundles `libplounter.so` | none needed |
+| Windows  | plugin `windows/CMakeLists.txt` → `core/`, bundles `plounter.dll` | none needed |
+| macOS    | pod compiles core via forwarder includes (`macos/Classes/`) | entitlement + usage string; system prompts |
+| Android  | Gradle `externalNativeBuild` → `src/CMakeLists.txt` → `core/` | `RECORD_AUDIO` + runtime request (`permission_handler`) |
+| iOS      | pod compiles core via forwarder includes (`ios/Classes/`) | usage string + runtime request (`permission_handler`) |
+
+CI (`.github/workflows/`): `core.yml` runs the DSP unit tests on
+Linux/macOS/Windows; `app.yml` analyzes, tests, and builds the app for all
+five targets (iOS unsigned).

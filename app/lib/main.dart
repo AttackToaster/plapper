@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import 'plounter_ffi.dart';
 
@@ -80,34 +82,46 @@ class _CounterPageState extends State<CounterPage>
     super.dispose();
   }
 
-  void _toggleListening() {
+  Future<void> _toggleListening() async {
     final p = _plounter;
     if (p == null) return;
-    setState(() {
-      if (_listening) {
-        p.stopListening();
-        _listening = false;
-        _poll?.cancel();
-        _poll = null;
-      } else {
-        _micError = null;
-        if (p.startListening()) {
-          _listening = true;
-          _poll = Timer.periodic(const Duration(milliseconds: 33), (_) {
-            final newCount = p.count;
-            if (newCount > _count) {
-              _pulse.forward(from: 1.0).then((_) => _pulse.reverse());
-            }
-            setState(() {
-              _count = newCount;
-              _envDb = p.envelopeDb;
-              _floorDb = p.noiseFloorDb;
-            });
-          });
-        } else {
-          _micError = 'Could not open the microphone.';
-        }
+
+    if (_listening) {
+      p.stopListening();
+      _poll?.cancel();
+      _poll = null;
+      setState(() => _listening = false);
+      return;
+    }
+
+    // Mobile requires an explicit runtime permission request; desktop
+    // platforms prompt (or just work) on first device open.
+    if (Platform.isAndroid || Platform.isIOS) {
+      final status = await Permission.microphone.request();
+      if (!status.isGranted) {
+        setState(() => _micError = 'Microphone permission denied.');
+        return;
       }
+    }
+
+    if (!p.startListening()) {
+      setState(() => _micError = 'Could not open the microphone.');
+      return;
+    }
+    setState(() {
+      _listening = true;
+      _micError = null;
+    });
+    _poll = Timer.periodic(const Duration(milliseconds: 33), (_) {
+      final newCount = p.count;
+      if (newCount > _count) {
+        _pulse.forward(from: 1.0).then((_) => _pulse.reverse());
+      }
+      setState(() {
+        _count = newCount;
+        _envDb = p.envelopeDb;
+        _floorDb = p.noiseFloorDb;
+      });
     });
   }
 

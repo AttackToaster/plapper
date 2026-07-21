@@ -11,14 +11,18 @@ final class _Detector extends Opaque {}
 final class _Capture extends Opaque {}
 
 DynamicLibrary _openCore() {
-  if (Platform.isIOS) return DynamicLibrary.process();
-  final name = Platform.isWindows
-      ? 'plounter.dll'
-      : Platform.isMacOS
-          ? 'libplounter.dylib'
-          : 'libplounter.so';
+  // On Apple platforms the core is compiled into the plounter_native pod
+  // (dynamic framework; falls back to process() for static linkage).
+  if (Platform.isIOS || Platform.isMacOS) {
+    try {
+      return DynamicLibrary.open('plounter_native.framework/plounter_native');
+    } on ArgumentError {
+      return DynamicLibrary.process();
+    }
+  }
+  final name = Platform.isWindows ? 'plounter.dll' : 'libplounter.so';
   // Bundled location first (runner rpath / loader path), then the local
-  // core build for `flutter run` during development.
+  // core build for tests and development.
   final candidates = [
     name,
     '../core/build/$name',
