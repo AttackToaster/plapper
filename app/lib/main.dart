@@ -19,11 +19,11 @@ void main() {
 void _migratePlounterPrefs() {
   if (!Platform.isLinux) return;
   try {
-    final dataHome = Platform.environment['XDG_DATA_HOME'] ??
+    final dataHome =
+        Platform.environment['XDG_DATA_HOME'] ??
         '${Platform.environment['HOME']}/.local/share';
     final old = File('$dataHome/dev.plounter.plounter/shared_preferences.json');
-    final fresh =
-        File('$dataHome/dev.plapper.plapper/shared_preferences.json');
+    final fresh = File('$dataHome/dev.plapper.plapper/shared_preferences.json');
     if (old.existsSync() && !fresh.existsSync()) {
       fresh.parent.createSync(recursive: true);
       old.copySync(fresh.path);
@@ -213,7 +213,7 @@ class _CounterPageState extends State<CounterPage>
   // Milestone message: shown every N claps. "{count}" expands to the count.
   int _milestoneN = 10;
   final TextEditingController _milestoneCtrl = TextEditingController(
-    text: 'yay!! {count} claps 🎀',
+    text: 'yay!! {count} plaps 🎀',
   );
   String? _milestoneShown;
   Timer? _milestoneHide;
@@ -241,6 +241,69 @@ class _CounterPageState extends State<CounterPage>
   ];
   int _konamiPos = 0;
   bool _konamiUnlocked = false;
+
+  bool _calibrating = false;
+
+  /// Auto noise threshold: watch how far the room's envelope pokes above
+  /// the adaptive floor for 2.5 s of silence, then set sensitivity a 6 dB
+  /// safety margin above the worst excursion.
+  Future<void> _autoCalibrate(void Function(VoidCallback) update) async {
+    final p = _plapper;
+    if (p == null || _calibrating) return;
+    if (!_listening) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: pal.accentDeep,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          content: const Text(
+            'start listening first, then auto-set 💖',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontFamily: 'Quicksand',
+              fontVariations: [_wghtSemi],
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+    update(() => _calibrating = true);
+    var maxDelta = 0.0;
+    for (var i = 0; i < 50; i++) {
+      await Future.delayed(const Duration(milliseconds: 50));
+      if (!mounted || !_listening) break;
+      final d = p.envelopeDb - p.noiseFloorDb;
+      if (d > maxDelta) maxDelta = d;
+    }
+    if (!mounted) return;
+    final v = (maxDelta + 6.0).clamp(3.0, 40.0);
+    p.sensitivityDb = v;
+    _prefs?.setDouble('sensitivityDb', v);
+    update(() {
+      _sensitivityDb = v;
+      _calibrating = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: pal.accentDeep,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: Text(
+          'sensitivity auto-set to +${v.toStringAsFixed(0)} dB ✨',
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontFamily: 'Quicksand',
+            fontVariations: [_wghtSemi],
+            color: Colors.white,
+          ),
+        ),
+      ),
+    );
+  }
 
   bool get _isDesktop =>
       Platform.isLinux || Platform.isWindows || Platform.isMacOS;
@@ -343,7 +406,7 @@ class _CounterPageState extends State<CounterPage>
 
   Future<void> _share() async {
     final text =
-        'I got $_sessionClaps claps in one plapper session!! 👏💖'
+        'I got $_sessionClaps plaps in one plapper session!! 👏💖'
         '${_bestSession > 0 ? ' (best ever: $_bestSession)' : ''}'
         ' · $_unlockedCount/${palettes.length} themes unlocked ✨';
     await Clipboard.setData(ClipboardData(text: text));
@@ -417,7 +480,7 @@ class _CounterPageState extends State<CounterPage>
                     ),
                   ),
                   Text(
-                    '$_lifetime lifetime claps',
+                    '$_lifetime lifetime plaps',
                     style: TextStyle(
                       fontSize: 11,
                       color: pal.textSoft,
@@ -450,7 +513,7 @@ class _CounterPageState extends State<CounterPage>
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     content: Text(
-                                      'clap $need more to unlock '
+                                      'plap $need more to unlock '
                                       '${palettes[i].name} ${palettes[i].emoji} 🔒✨',
                                       textAlign: TextAlign.center,
                                       style: const TextStyle(
@@ -521,15 +584,51 @@ class _CounterPageState extends State<CounterPage>
                     label: 'sensitivity ♡',
                     trailing:
                         '+${_sensitivityDb.toStringAsFixed(0)} dB over room noise',
-                    child: _slider(
-                      value: _sensitivityDb,
-                      min: 3,
-                      max: 40,
-                      onChanged: (v) {
-                        both(() => _sensitivityDb = v);
-                        _plapper?.sensitivityDb = v;
-                      },
-                      onChangeEnd: (v) => _prefs?.setDouble('sensitivityDb', v),
+                    child: Column(
+                      children: [
+                        _slider(
+                          value: _sensitivityDb,
+                          min: 3,
+                          max: 40,
+                          onChanged: (v) {
+                            both(() => _sensitivityDb = v);
+                            _plapper?.sensitivityDb = v;
+                          },
+                          onChangeEnd: (v) =>
+                              _prefs?.setDouble('sensitivityDb', v),
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            style: TextButton.styleFrom(
+                              foregroundColor: pal.accentDeep,
+                              textStyle: const TextStyle(
+                                fontFamily: 'Quicksand',
+                                fontVariations: [_wghtSemi],
+                                fontSize: 12,
+                              ),
+                            ),
+                            onPressed: _calibrating
+                                ? null
+                                : () => _autoCalibrate(both),
+                            icon: _calibrating
+                                ? SizedBox(
+                                    width: 13,
+                                    height: 13,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: pal.accentDeep,
+                                    ),
+                                  )
+                                : const Icon(Icons.auto_awesome, size: 15),
+                            label: Text(
+                              _calibrating
+                                  ? 'measuring room… stay quiet 🤫'
+                                  : 'auto-set from room noise',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -567,7 +666,7 @@ class _CounterPageState extends State<CounterPage>
                           decoration: InputDecoration(
                             counterText: '',
                             isDense: true,
-                            hintText: 'your message — {count} = clap count',
+                            hintText: 'your message — {count} = plap count',
                             hintStyle: TextStyle(
                               color: pal.cardText.withValues(alpha: 0.35),
                             ),
@@ -828,7 +927,7 @@ class _CounterPageState extends State<CounterPage>
                             ),
                           ),
                           Text(
-                            _count == 1 ? 'clap' : 'claps',
+                            _count == 1 ? 'plap' : 'plaps',
                             style: TextStyle(
                               fontFamily: 'Pacifico',
                               fontSize: 22,
@@ -899,7 +998,7 @@ class _CounterPageState extends State<CounterPage>
                               _StatChip(
                                 pal: pal,
                                 emoji: '⚡',
-                                label: 'claps / sec',
+                                label: 'plaps / sec',
                                 value: _rate.toStringAsFixed(1),
                               ),
                               const SizedBox(width: 10),
@@ -1001,17 +1100,25 @@ class _Wordmark extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text('✧ ', style: TextStyle(fontSize: 18, color: pal.secondary)),
+        Text('✧ ', style: TextStyle(fontSize: 18, color: pal.accent)),
         ShaderMask(
           shaderCallback: (bounds) => LinearGradient(
-            colors: [pal.accentDeep, pal.secondary],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [pal.accent, pal.accentDeep],
           ).createShader(bounds),
-          child: const Text(
+          child: Text(
             'plapper',
             style: TextStyle(
               fontFamily: 'Pacifico',
-              fontSize: 30,
+              fontSize: 32,
               color: Colors.white,
+              shadows: [
+                Shadow(
+                  color: pal.accent.withValues(alpha: 0.55),
+                  blurRadius: 18,
+                ),
+              ],
             ),
           ),
         ),
