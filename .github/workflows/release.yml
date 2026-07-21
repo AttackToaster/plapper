@@ -54,6 +54,25 @@ jobs:
         with:
           files: plapper-macos.zip
 
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter build ios --release --no-codesign
+        working-directory: app
+      - name: Package unsigned ipa
+        run: |
+          mkdir Payload
+          cp -r app/build/ios/iphoneos/Runner.app Payload/
+          zip -qr plapper-ios-unsigned.ipa Payload
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: plapper-ios-unsigned.ipa
+
   android:
     runs-on: ubuntu-latest
     steps:
